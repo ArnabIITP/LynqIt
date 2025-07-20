@@ -6,8 +6,56 @@ const MobileRedirectScreen = () => {
   const [animate, setAnimate] = useState(false);
   const [messageIndex, setMessageIndex] = useState(0);
   const [particles, setParticles] = useState([]);
+  const [isIpadPro, setIsIpadPro] = useState(false);
   
-  const messages = [
+  // Detect iPad Pro specifically to show targeted messages
+  useEffect(() => {
+    const detectIpadPro = () => {
+      const userAgent = navigator.userAgent.toLowerCase();
+      const isTouchDevice = 'ontouchend' in document;
+      const isMacLike = /(mac|darwin)/i.test(userAgent);
+      const isIpad = /ipad/i.test(userAgent);
+      const hasHighResolution = window.devicePixelRatio >= 2;
+      
+      // Various iPad Pro detection methods
+      const hasIpadDimensions = (
+        // iPad Pro 11-inch and 12.9-inch dimensions in portrait or landscape
+        (window.innerWidth === 834 && window.innerHeight === 1194) ||
+        (window.innerWidth === 1194 && window.innerHeight === 834) ||
+        (window.innerWidth === 1024 && window.innerHeight === 1366) ||
+        (window.innerWidth === 1366 && window.innerHeight === 1024)
+      );
+      
+      // Check for multi-touch capability typical of iPad
+      const hasMultiTouch = window.navigator.maxTouchPoints > 2;
+      
+      // iPad OS 13+ often reports as Mac but has these characteristics
+      const isPadOS13Plus = isMacLike && isTouchDevice && hasMultiTouch;
+      
+      // Combine all detection methods
+      setIsIpadPro(
+        isPadOS13Plus || 
+        (isIpad && hasHighResolution && window.innerWidth >= 768) ||
+        hasIpadDimensions || 
+        // If it has the dimensions of a large tablet with touch capability
+        (hasMultiTouch && (window.innerWidth >= 768 && window.innerWidth <= 1366))
+      );
+    };
+    
+    detectIpadPro();
+    
+    // Also check on resize in case orientation changes
+    window.addEventListener('resize', detectIpadPro);
+    return () => window.removeEventListener('resize', detectIpadPro);
+  }, []);
+  
+  // Select appropriate message set based on device detection
+  const messages = isIpadPro ? [
+    "iPad Pro is not supported for LYNQIT",
+    "Please use a desktop or laptop computer",
+    "Full desktop experience required for this app",
+    "Switch to a non-tablet device for access"
+  ] : [
     "Use LYNQIT from a computer browser",
     "Experience the full interface on desktop",
     "For the best experience, switch to a larger device",

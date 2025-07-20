@@ -39,13 +39,59 @@ const App = () => {
   useEffect(() => {
     checkAuth();
     
-    // Check if device is mobile or tablet
+    // Check if device is mobile or tablet (including iPad Pro)
     const checkMobileDevice = () => {
       const userAgent = navigator.userAgent.toLowerCase();
-      // Include iPads and tablets in the regex
-      const mobileRegex = /android|webos|iphone|ipad|ipod|blackberry|windows phone|tablet|kindle|silk/i;
-      // Consider any device with width less than 1024px as a restricted device
-      setIsMobile(mobileRegex.test(userAgent) || window.innerWidth < 1024);
+      
+      // Enhanced function to detect iPad Pro specifically 
+      // (which might identify as Mac in newer versions)
+      const isIPadPro = () => {
+        // iPad Pro often identifies as Mac in newer OS versions but has touch support
+        const isTouchDevice = 'ontouchend' in document;
+        const isMacLike = /(mac|darwin)/i.test(userAgent);
+        const hasMultiTouch = window.navigator.maxTouchPoints > 2;
+        
+        // Check for iPad Pro specific dimensions
+        const hasIpadDimensions = (
+          // iPad Pro 11-inch and 12.9-inch dimensions in portrait or landscape
+          (window.innerWidth === 834 && window.innerHeight === 1194) ||
+          (window.innerWidth === 1194 && window.innerHeight === 834) ||
+          (window.innerWidth === 1024 && window.innerHeight === 1366) ||
+          (window.innerWidth === 1366 && window.innerHeight === 1024)
+        );
+        
+        return (isTouchDevice && isMacLike && hasMultiTouch) || hasIpadDimensions;
+      };
+      
+      // Enhanced regex to catch all mobile and tablet devices
+      const mobileRegex = /android|webos|iphone|ipad|ipod|blackberry|windows phone|tablet|kindle|silk|mobile|crios|firefox.*mobile|opera.*mobile/i;
+      
+      // Additional check for the newer iPad Pro models that identify as desktop Safari
+      const isPadOSBasedOnRatio = () => {
+        // These checks help identify iPad OS devices by their aspect ratios and touch capabilities
+        const aspectRatio = window.innerWidth / window.innerHeight;
+        const isPadAspectRatio = (aspectRatio > 0.65 && aspectRatio < 0.85) || 
+                                 (aspectRatio > 1.18 && aspectRatio < 1.55);
+        
+        return window.navigator.maxTouchPoints > 0 && 
+               isPadAspectRatio && 
+               window.innerWidth >= 768 && 
+               window.innerWidth <= 1366;
+      };
+
+      // Detect by:
+      // 1. User agent pattern matching
+      // 2. iPad Pro specific detection
+      // 3. Small screen size (below typical desktop)
+      // 4. Touch capability + screen size typical for tablets
+      // 5. iPad OS aspect ratio + touch detection
+      setIsMobile(
+        mobileRegex.test(userAgent) || 
+        isIPadPro() || 
+        window.innerWidth < 1024 || 
+        (window.navigator.maxTouchPoints > 0 && window.innerWidth < 1366) || // Likely a tablet if touch-enabled and under typical desktop width
+        isPadOSBasedOnRatio()
+      );
     };
     
     checkMobileDevice();

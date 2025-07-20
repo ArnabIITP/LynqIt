@@ -748,6 +748,73 @@
   }
 }
 
+/* iPad Pro specific styles */
+@media (min-width: 1024px) and (max-width: 1366px) and (orientation: landscape),
+       (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) {
+  .mobile-redirect-container {
+    max-width: 700px;
+  }
+  
+  .logo-container {
+    width: 160px;
+    height: 160px;
+    margin-bottom: 20px;
+  }
+  
+  .mobile-logo {
+    width: 100px;
+    height: 100px;
+  }
+  
+  .app-title {
+    font-size: 4rem;
+  }
+  
+  .app-title-underline {
+    width: 100px;
+    height: 5px;
+    margin: 10px auto 30px;
+  }
+  
+  .device-illustration {
+    transform: scale(1.4);
+    margin: 30px 0;
+  }
+  
+  .message-container {
+    height: 70px;
+    margin: 30px 0;
+  }
+  
+  .redirect-message {
+    font-size: 1.6rem;
+    line-height: 1.5;
+  }
+  
+  .bottom-section {
+    padding-bottom: 60px;
+  }
+  
+  .desktop-icon-container {
+    width: 60px;
+    height: 60px;
+    margin-bottom: 15px;
+  }
+  
+  .desktop-message {
+    font-size: 1.2rem;
+  }
+  
+  .dots-indicator {
+    margin-bottom: 25px;
+  }
+  
+  .dots-indicator .dot {
+    width: 12px;
+    height: 12px;
+  }
+}
+
 /* Specific smartphone adjustments */
 @media (max-width: 380px) {
   .mobile-redirect-container {
