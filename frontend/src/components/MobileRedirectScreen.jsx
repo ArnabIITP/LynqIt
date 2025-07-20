@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import "./MobileRedirectScreen.css";
+import logo from "../../public/logo.svg";
 
 const MobileRedirectScreen = () => {
   const [animate, setAnimate] = useState(false);
@@ -7,10 +8,10 @@ const MobileRedirectScreen = () => {
   const [particles, setParticles] = useState([]);
   
   const messages = [
-    "Use LYNQIT from a browser in your computer or laptop",
-    "Experience the full LYNQIT interface on desktop",
+    "Use LYNQIT from a computer browser",
+    "Experience the full interface on desktop",
     "For the best experience, switch to a larger device",
-    "Mobile version coming soon! For now, use desktop"
+    "Mobile version coming soon! Use desktop for now"
   ];
 
   // Generate random particles for background effect
@@ -64,6 +65,18 @@ const MobileRedirectScreen = () => {
       </div>
       
       <div className="mobile-redirect-container">
+        {/* App Logo Section */}
+        <div className="logo-wrapper">
+          <div className="logo-container">
+            <img src={logo} alt="LYNQIT Logo" className="mobile-logo" />
+            <div className="logo-glow"></div>
+          </div>
+        </div>
+        
+        {/* App Title */}
+        <h1 className="app-title">LYNQIT</h1>
+        <div className="app-title-underline"></div>
+        
         <div className="device-illustration">
           <div className="laptop">
             <div className="laptop-screen">
@@ -100,10 +113,12 @@ const MobileRedirectScreen = () => {
       
       <div className="bottom-section">
         <div className="dots-indicator">
-          <span className="dot active"></span>
-          <span className="dot"></span>
-          <span className="dot"></span>
-          <span className="dot"></span>
+          {messages.map((_, index) => (
+            <span 
+              key={index} 
+              className={`dot ${messageIndex === index ? 'active' : ''}`}
+            ></span>
+          ))}
         </div>
         
         <div className="desktop-icon-container">

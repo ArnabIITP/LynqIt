@@ -39,11 +39,13 @@ const App = () => {
   useEffect(() => {
     checkAuth();
     
-    // Check if device is mobile
+    // Check if device is mobile or tablet
     const checkMobileDevice = () => {
       const userAgent = navigator.userAgent.toLowerCase();
-      const mobileRegex = /android|webos|iphone|ipad|ipod|blackberry|windows phone/i;
-      setIsMobile(mobileRegex.test(userAgent) || window.innerWidth < 768);
+      // Include iPads and tablets in the regex
+      const mobileRegex = /android|webos|iphone|ipad|ipod|blackberry|windows phone|tablet|kindle|silk/i;
+      // Consider any device with width less than 1024px as a restricted device
+      setIsMobile(mobileRegex.test(userAgent) || window.innerWidth < 1024);
     };
     
     checkMobileDevice();

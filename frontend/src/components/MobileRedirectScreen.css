@@ -1,3 +1,8 @@
+/* Global box-sizing for all elements */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 .mobile-redirect {
   height: 100vh;
   width: 100vw;
@@ -5,7 +10,7 @@
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  background: linear-gradient(to bottom, #304793 0%, #1a3276 100%);
+  background: linear-gradient(135deg, #304793 0%, #1a3276 65%, #152761 100%);
   text-align: center;
   padding: 1.5rem;
   transition: all 0.5s ease;
@@ -13,6 +18,7 @@
   transform: translateY(20px);
   position: relative;
   overflow: hidden;
+  box-sizing: border-box; /* Ensure padding is included in width/height */
 }
 
 .mobile-redirect.animated {
@@ -50,6 +56,7 @@
   margin-bottom: 50px;
   position: relative;
   z-index: 10;
+  justify-content: center;
 }
 
 .glowing-border {
@@ -73,6 +80,7 @@
 .logo-wrapper {
   position: relative;
   margin-bottom: 1rem;
+  margin-top: -30px;
 }
 
 .logo-container {
@@ -84,30 +92,33 @@
   background: rgba(255, 255, 255, 0.95);
   border-radius: 50%;
   box-shadow: 
-    0 10px 25px rgba(0, 0, 0, 0.2),
-    0 0 0 15px rgba(255, 255, 255, 0.05);
+    0 10px 25px rgba(0, 0, 0, 0.3),
+    0 0 0 15px rgba(255, 255, 255, 0.08);
   position: relative;
   transform: translateY(0);
   animation: float 6s ease-in-out infinite;
   z-index: 2;
+  margin-bottom: 15px;
 }
 
 .logo-glow {
   position: absolute;
-  width: 100%;
-  height: 100%;
+  width: 140%;
+  height: 140%;
+  left: -20%;
+  top: -20%;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(106, 141, 255, 0.8) 0%, rgba(106, 141, 255, 0) 70%);
-  filter: blur(10px);
+  background: radial-gradient(circle, rgba(123, 92, 240, 0.6) 0%, rgba(106, 141, 255, 0) 70%);
+  filter: blur(15px);
   opacity: 0.7;
   animation: pulse-glow 3s infinite;
 }
 
 .mobile-logo {
-  width: 80px;
-  height: 80px;
-  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.2));
-  animation: subtle-rotate 20s linear infinite;
+  width: 75px;
+  height: 75px;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
+  animation: subtle-rotate 60s linear infinite;
   z-index: 2;
 }
 
@@ -119,24 +130,25 @@
 }
 
 .app-title {
-  font-size: 2.8rem;
+  font-size: 3rem;
   font-weight: 800;
   margin: 0;
   background: linear-gradient(135deg, #ffffff 0%, #d1e3ff 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  letter-spacing: 2px;
+  letter-spacing: 3px;
   text-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
   position: relative;
+  font-family: Arial, sans-serif;
 }
 
 .app-title-underline {
-  width: 60px;
-  height: 4px;
+  width: 80px;
+  height: 3px;
   background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 50%, rgba(255,255,255,0) 100%);
   border-radius: 4px;
-  margin: 8px 0 15px;
+  margin: 8px auto 25px;
 }
 
 .content-wrapper {
@@ -153,9 +165,9 @@
 }
 
 .redirect-message {
-  font-size: 1rem;
-  color: rgba(255, 255, 255, 0.9);
-  line-height: 1.4;
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.95);
+  line-height: 1.5;
   position: absolute;
   top: 0;
   left: 0;
@@ -164,6 +176,8 @@
   transition: all 0.5s ease;
   opacity: 0;
   transform: translateY(20px);
+  font-weight: 500;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .redirect-message.active {
@@ -173,65 +187,111 @@
 
 .device-illustration {
   position: relative;
-  width: 280px;
+  width: 300px;
   height: 200px;
   margin-bottom: 20px;
+  animation: laptop-hover 4s ease-in-out infinite;
+  transform-style: preserve-3d;
+  perspective: 800px;
 }
 
 .laptop {
   position: relative;
-  width: 280px;
+  width: 300px;
   height: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
+  transform: rotateX(10deg);
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
 }
 
 .laptop-screen {
-  width: 280px;
-  height: 180px;
+  width: 300px;
+  height: 190px;
   background: #000;
   border-radius: 10px 10px 0 0;
   padding: 10px;
   overflow: hidden;
   position: relative;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  border: 2px solid #333;
 }
 
 .laptop-screen-navbar {
   width: 100%;
-  height: 20px;
-  background-color: #4267b2;
+  height: 24px;
+  background-color: #7B5CF0; /* Matching the logo color */
   border-top-left-radius: 6px;
   border-top-right-radius: 6px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+}
+
+.laptop-screen-navbar::before {
+  content: "";
+  display: block;
+  width: 10px;
+  height: 10px;
+  background: #ff5f57;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+.laptop-screen-navbar::after {
+  content: "";
+  display: block;
+  width: 10px;
+  height: 10px;
+  background: #27c93f;
+  border-radius: 50%;
+  margin-right: 6px;
 }
 
 .laptop-screen-content {
   width: 100%;
-  height: calc(100% - 20px);
-  background: #fff;
+  height: calc(100% - 24px);
+  background: #f5f5f5;
   padding: 15px;
   position: relative;
   border-bottom-left-radius: 6px;
   border-bottom-right-radius: 6px;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.1);
 }
 
 .laptop-base {
-  width: 300px;
-  height: 15px;
-  background: #111;
+  width: 320px;
+  height: 18px;
+  background: linear-gradient(to bottom, #333 0%, #111 100%);
   border-radius: 0 0 10px 10px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
 }
 
 .chat-bubble {
   position: relative;
-  padding: 8px 12px;
+  padding: 10px 14px;
   border-radius: 18px;
-  min-height: 16px;
-  margin-bottom: 10px;
+  min-height: 18px;
+  margin-bottom: 12px;
   display: flex;
   align-items: center;
   max-width: 70%;
+  animation: bubbleFadeIn 0.5s forwards;
+  opacity: 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.chat-bubble:nth-child(1) {
+  animation-delay: 0.5s;
+}
+
+.chat-bubble:nth-child(2) {
+  animation-delay: 1.2s;
+}
+
+.chat-bubble:nth-child(3) {
+  animation-delay: 1.9s;
 }
 
 .chat-bubble.left {
@@ -243,7 +303,7 @@
 
 .chat-bubble.right {
   align-self: flex-end;
-  background: #4267b2;
+  background: #7B5CF0; /* Matching logo color */
   border-bottom-right-radius: 5px;
   margin-left: auto;
 }
@@ -260,6 +320,17 @@
 
 .chat-bubble.right .message-text {
   color: white;
+}
+
+@media (max-height: 650px) {
+  .message-container {
+    margin: 10px 0;
+  }
+  
+  .device-illustration {
+    transform: scale(0.6);
+    margin: -10px 0;
+  }
 }
 
 .message-container {
@@ -369,8 +440,10 @@
   align-items: center;
   padding-bottom: 40px;
   z-index: 100;
-  animation: fadeIn 1s forwards 1s;
+  animation: fadeIn 1s forwards 1.5s;
   opacity: 0;
+  background: linear-gradient(to top, rgba(26, 50, 118, 0.8) 0%, rgba(26, 50, 118, 0) 100%);
+  padding-top: 30px;
 }
 
 .dots-indicator {
@@ -392,14 +465,19 @@
 }
 
 .desktop-icon-container {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.15);
   border-radius: 50%;
-  width: 40px;
-  height: 40px;
+  width: 50px;
+  height: 50px;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  animation: bounce 2s infinite;
 }
 
 .desktop-icon {
@@ -410,10 +488,11 @@
 
 .desktop-message {
   color: white;
-  font-size: 14px;
-  font-weight: 400;
-  opacity: 0.9;
+  font-size: 16px;
+  font-weight: 500;
+  opacity: 0.95;
   text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 @keyframes float {
@@ -433,7 +512,7 @@
     transform: rotateX(10deg) translateY(0);
   }
   50% {
-    transform: rotateX(12deg) translateY(-5px);
+    transform: rotateX(12deg) translateY(-8px);
   }
 }
 
@@ -529,40 +608,267 @@
 }
 
 /* For better responsiveness on smaller devices */
-@media (max-height: 700px) {
+@media (max-height: 700px), (max-width: 480px) {
   .mobile-redirect-container {
-    gap: 1rem;
-    padding: 1.5rem;
+    gap: 0.8rem;
+    padding: 1rem;
+    margin-bottom: 30px;
   }
   
   .logo-container {
-    width: 90px;
-    height: 90px;
+    width: 80px;
+    height: 80px;
+    margin-bottom: 8px;
   }
   
   .mobile-logo {
-    width: 60px;
-    height: 60px;
-  }
-  
-  .app-title {
-    font-size: 2.4rem;
-  }
-  
-  .message-container {
+    width: 50px;
     height: 50px;
   }
   
+  .app-title {
+    font-size: 2.2rem;
+    letter-spacing: 2px;
+  }
+  
+  .app-title-underline {
+    width: 60px;
+    margin: 5px auto 15px;
+  }
+  
+  .message-container {
+    height: 45px;
+  }
+  
   .redirect-message {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
   }
   
   .device-illustration {
-    transform: scale(0.85);
-    margin: 5px 0;
+    transform: scale(0.7);
+    margin: 0;
   }
   
   .qr-section {
     display: none;
+  }
+  
+  .bottom-section {
+    padding-bottom: 25px;
+  }
+  
+  .desktop-icon-container {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* Landscape orientation on phones */
+@media (max-height: 480px) and (orientation: landscape) {
+  .mobile-redirect-container {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
+    width: 95%;
+    max-width: 100%;
+    padding: 0;
+  }
+  
+  .logo-wrapper {
+    flex: 0 0 auto;
+    margin: 0;
+  }
+  
+  .content-wrapper {
+    margin-top: 0;
+    padding: 0 10px;
+  }
+  
+  .app-title {
+    font-size: 2rem;
+    margin: 0;
+  }
+  
+  .app-title-underline {
+    margin: 3px auto 8px;
+  }
+  
+  .device-illustration {
+    display: none;
+  }
+  
+  .message-container {
+    margin: 5px 0;
+    height: auto;
+  }
+  
+  .bottom-section {
+    padding-bottom: 10px;
+    flex-direction: row;
+    justify-content: center;
+    gap: 15px;
+  }
+  
+  .dots-indicator {
+    margin-bottom: 0;
+  }
+  
+  .desktop-icon-container {
+    margin-bottom: 0;
+  }
+}
+
+/* For tablets in landscape mode */
+@media (min-width: 768px) and (max-width: 1024px) and (orientation: landscape) {
+  .device-illustration {
+    transform: scale(1.2);
+    margin: 25px 0;
+  }
+  
+  .logo-container {
+    width: 140px;
+    height: 140px;
+  }
+  
+  .mobile-logo {
+    width: 90px;
+    height: 90px;
+  }
+  
+  .app-title {
+    font-size: 3.5rem;
+  }
+  
+  .redirect-message {
+    font-size: 1.3rem;
+  }
+  
+  .message-container {
+    height: 60px;
+  }
+}
+
+/* Specific smartphone adjustments */
+@media (max-width: 380px) {
+  .mobile-redirect-container {
+    max-width: 95%;
+    padding: 0.75rem;
+    margin-bottom: 20px;
+  }
+  
+  .logo-wrapper {
+    margin-top: -20px;
+    margin-bottom: 0.5rem;
+  }
+  
+  .logo-container {
+    width: 70px;
+    height: 70px;
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2),
+      0 0 0 10px rgba(255, 255, 255, 0.05);
+  }
+  
+  .mobile-logo {
+    width: 45px;
+    height: 45px;
+  }
+  
+  .app-title {
+    font-size: 1.8rem;
+  }
+  
+  .app-title-underline {
+    width: 50px;
+    height: 2px;
+    margin: 3px auto 12px;
+  }
+  
+  .device-illustration {
+    transform: scale(0.6);
+    margin: -15px 0;
+  }
+  
+  .message-container {
+    height: 40px;
+    margin-top: 0;
+  }
+  
+  .redirect-message {
+    font-size: 0.85rem;
+    line-height: 1.3;
+  }
+  
+  .bottom-section {
+    padding-bottom: 20px;
+  }
+  
+  .desktop-icon-container {
+    width: 38px;
+    height: 38px;
+    margin-bottom: 8px;
+  }
+  
+  .desktop-message {
+    font-size: 14px;
+  }
+  
+  .dots-indicator {
+    margin-bottom: 10px;
+  }
+  
+  .dots-indicator .dot {
+    width: 6px;
+    height: 6px;
+  }
+}
+
+/* Extra small smartphones */
+@media (max-width: 320px) {
+  .mobile-redirect {
+    padding: 1rem 0.5rem;
+  }
+
+  .mobile-redirect-container {
+    max-width: 100%;
+    width: 100%;
+    padding: 0;
+    margin-bottom: 15px;
+  }
+  
+  .logo-container {
+    width: 60px;
+    height: 60px;
+  }
+  
+  .mobile-logo {
+    width: 38px;
+    height: 38px;
+  }
+  
+  .app-title {
+    font-size: 1.6rem;
+  }
+  
+  .device-illustration {
+    transform: scale(0.5);
+    margin: -25px 0;
+  }
+  
+  .message-container {
+    height: 35px;
+  }
+  
+  .redirect-message {
+    font-size: 0.8rem;
+  }
+  
+  .bottom-section {
+    padding-bottom: 15px;
+    padding-top: 20px;
+  }
+  
+  .desktop-message {
+    font-size: 12px;
+    max-width: 90%;
   }
 }
