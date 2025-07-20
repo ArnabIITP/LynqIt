@@ -375,38 +375,62 @@ io.on("connection", async (socket) => {
   });
 
   // Handle message deletion for both personal and group messages
-  socket.on("messageDeleted", async ({ messageId, deleteType }) => {
+  socket.on("messageDeleted", async ({ messageId, deleteType }, callback) => {
     try {
+      console.log(`🗑️ User ${userId} requested to delete message ${messageId} for ${deleteType}`);
       const message = await Message.findById(messageId);
 
       if (!message) {
-        return;
+        console.log(`❌ Message ${messageId} not found for deletion`);
+        return callback?.({ success: false, error: "Message not found" });
       }
 
       // Check if user has permission to delete
       const canDelete = message.senderId.toString() === userId.toString();
       if (!canDelete) {
-        return;
+        console.error(`❌ Unauthorized deletion attempt for message ${messageId} by user ${userId}`);
+        return callback?.({ success: false, error: "Unauthorized deletion attempt" });
       }
 
       // Process the deletion based on type
       if (deleteType === 'everyone') {
-        // For "delete for everyone", delete the message and associated media
+        // For "delete for everyone", check time window (within 60 minutes)
+        const messageDate = new Date(message.createdAt);
+        const now = new Date();
+        const minutesDiff = (now - messageDate) / (1000 * 60);
+
+        if (minutesDiff > 60) {
+          console.log(`❌ Time window exceeded for deleting message ${messageId}: ${minutesDiff} minutes`);
+          return callback?.({ success: false, error: "Deletion time window expired" });
+        }
+        
+        // Delete associated media if exists
         if (message.image) {
           try {
             // Extract public ID from Cloudinary URL
             const publicId = extractCloudinaryPublicId(message.image);
             if (publicId) {
               await cloudinary.uploader.destroy(publicId);
-              console.log(`[Socket] Deleted media from Cloudinary: ${publicId}`);
+              console.log(`✅ [Socket] Deleted media from Cloudinary: ${publicId}`);
             }
           } catch (error) {
-            console.error("[Socket] Error deleting media from Cloudinary:", error);
+            console.error("❌ [Socket] Error deleting media from Cloudinary:", error);
           }
         }
 
-        // Delete the message from database
-        await Message.findByIdAndDelete(messageId);
+        // Update the message as deleted instead of actually deleting
+        await Message.findByIdAndUpdate(
+          messageId, 
+          { 
+            isDeleted: true, 
+            deletedFor: 'everyone', 
+            deletedBy: userId,
+            deletedAt: new Date(),
+            // Clear sensitive content
+            text: '',
+            image: null
+          }
+        );
 
         // Handle group vs direct message notifications
         if (message.messageType === 'group' && message.groupId) {
@@ -473,23 +497,26 @@ io.on("connection", async (socket) => {
   });
 
   // Handle message editing
-  socket.on("messageEdited", async ({ messageId, text }) => {
+  socket.on("messageEdited", async ({ messageId, text }, callback) => {
     try {
+      console.log(`🖊️ User ${userId} is editing message ${messageId}`);
       const message = await Message.findById(messageId);
 
       if (!message) {
-        return;
+        console.log(`❌ Message ${messageId} not found for editing`);
+        return callback?.({ success: false, error: "Message not found" });
       }
 
       // Verify that the sender is the one editing
       if (message.senderId.toString() !== userId) {
-        console.error("Unauthorized attempt to edit message:", messageId);
-        return;
+        console.error(`❌ Unauthorized attempt by ${userId} to edit message ${messageId}`);
+        return callback?.({ success: false, error: "Unauthorized" });
       }
 
       // Check if message is deleted
       if (message.isDeleted) {
-        return;
+        console.log(`❌ Attempted to edit deleted message ${messageId}`);
+        return callback?.({ success: false, error: "Message is deleted" });
       }
 
       // Check if it's within 15 minutes
@@ -498,7 +525,8 @@ io.on("connection", async (socket) => {
       const minutesDiff = (now - messageDate) / (1000 * 60);
 
       if (minutesDiff > 15) {
-        return;
+        console.log(`❌ Time window exceeded for editing message ${messageId}: ${minutesDiff} minutes`);
+        return callback?.({ success: false, error: "Edit time window expired" });
       }
 
       // If this is the first edit, save the original text
@@ -513,8 +541,15 @@ io.on("connection", async (socket) => {
           editedAt: new Date(),
           originalText
         },
-        { new: true }
-      );
+        { new: true, runValidators: true }
+      ).populate('senderId', 'fullName username profilePic');
+      
+      console.log(`✅ Successfully edited message ${messageId}`);
+      
+      // Acknowledge success to the client
+      if (callback) {
+        callback({ success: true, message: updatedMessage });
+      }
 
       // Handle group vs direct message notifications
       if (message.messageType === 'group' && message.groupId) {

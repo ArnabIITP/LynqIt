@@ -1,5 +1,6 @@
 import Navbar from "./components/Navbar";
 import ErrorBoundary from "./components/ErrorBoundary";
+import MobileRedirectScreen from "./components/MobileRedirectScreen";
 
 import HomePage from "./pages/HomePage";
 import SignUpPage from "./pages/SignUpPage";
@@ -18,7 +19,7 @@ import { useAuthStore } from "./store/useAuthStore";
 import { useThemeStore } from "./store/useThemeStore";
 import { useChatStore } from "./store/useChatStore";
 import { useGroupStore } from "./store/useGroupStore";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { initializeEncryption } from "./utils/encryption";
 import { getGoogleClientId } from "./config/environment";
@@ -31,11 +32,26 @@ const App = () => {
   const { theme, autoThemeEnabled, checkAutoTheme } = useThemeStore();
   const { subscribeToMessages, unsubscribeFromMessages, getUnreadCounts } = useChatStore();
   const { subscribeToGroupEvents, unsubscribeFromGroupEvents } = useGroupStore();
+  const [isMobile, setIsMobile] = useState(false);
 
   console.log({ onlineUsers });
 
   useEffect(() => {
     checkAuth();
+    
+    // Check if device is mobile
+    const checkMobileDevice = () => {
+      const userAgent = navigator.userAgent.toLowerCase();
+      const mobileRegex = /android|webos|iphone|ipad|ipod|blackberry|windows phone/i;
+      setIsMobile(mobileRegex.test(userAgent) || window.innerWidth < 768);
+    };
+    
+    checkMobileDevice();
+    window.addEventListener('resize', checkMobileDevice);
+    
+    return () => {
+      window.removeEventListener('resize', checkMobileDevice);
+    };
   }, [checkAuth]);
 
   // Initialize encryption when user is authenticated
@@ -92,6 +108,11 @@ const App = () => {
         <Loader className="size-10 animate-spin" />
       </div>
     );
+
+  // Show mobile redirect screen for mobile devices
+  if (isMobile) {
+    return <MobileRedirectScreen />;
+  }
 
   return (
     <GoogleOAuthProvider clientId={getGoogleClientId()}>

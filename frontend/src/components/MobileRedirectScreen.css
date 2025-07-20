@@ -1,0 +1,56 @@
+.mobile-redirect {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background-color: #f8f9fa;
+  text-align: center;
+  padding: 2rem;
+}
+
+.mobile-redirect-container {
+  max-width: 500px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.mobile-logo {
+  width: 80px;
+  height: 80px;
+}
+
+.mobile-redirect h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0;
+  color: #333;
+}
+
+.mobile-redirect p {
+  font-size: 1.2rem;
+  margin: 0;
+  color: #555;
+  line-height: 1.5;
+}
+
+.device-icon {
+  margin-top: 2rem;
+  color: #666;
+  animation: pulse 2s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.6;
+  }
+}

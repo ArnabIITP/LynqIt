@@ -128,7 +128,8 @@ export const getMessages = async (req, res) => {
         path: 'senderId',
         select: 'fullName username profilePic'
       }
-    }).populate('statusReply.statusId');
+    }).populate('statusReply.statusId')
+      .sort({ createdAt: 1 }); // Sort by creation time in ascending order
 
     // Add status reply information to messages
     const messagesWithStatusInfo = messages.map(message => {

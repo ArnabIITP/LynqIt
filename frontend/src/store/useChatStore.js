@@ -20,6 +20,10 @@ export const useChatStore = create((set, get) => ({
     totalGroups: 0,
     totalMentions: 0
   },
+  pendingDeliveredMessages: [], // Messages waiting to be marked as delivered
+  pendingSeenMessages: [], // Messages waiting to be marked as seen
+  pendingEdits: {}, // Message edits waiting to be sent
+  pendingDeletes: {}, // Message deletions waiting to be sent
   replyingTo: null, // Tracks number of unread messages per user
   isDeletingMessage: false,
   connectionStatus: 'connected', // 'connected', 'connecting', 'disconnected'
@@ -80,13 +84,17 @@ export const useChatStore = create((set, get) => ({
     set({ isMessagesLoading: true });
     try {
       const res = await axiosInstance.get(`/messages/${userId}`);
-      set({ messages: res.data });
+      
+      // Ensure messages are sorted chronologically by createdAt
+      const sortedMessages = [...res.data].sort((a, b) => 
+        new Date(a.createdAt) - new Date(b.createdAt)
+      );
+      
+      set({ messages: sortedMessages });
 
       // Set the timestamp of the latest message for auto-refresh comparison
-      if (res.data && res.data.length > 0) {
-        const latestMessage = [...res.data].sort((a, b) =>
-          new Date(b.createdAt) - new Date(a.createdAt)
-        )[0];
+      if (sortedMessages && sortedMessages.length > 0) {
+        const latestMessage = sortedMessages[sortedMessages.length - 1];
         set({ lastMessageTimestamp: new Date(latestMessage.createdAt).getTime() });
       }
 
@@ -307,13 +315,22 @@ export const useChatStore = create((set, get) => ({
           const ack = await ackPromise;
           console.log("✅ Message sent via Socket.IO:", ack);
 
-          // Replace temp message with server response
-          set(state => ({
-            messages: state.messages.map(msg =>
+          // Replace temp message with server response and ensure proper sorting
+          set(state => {
+            const updatedMessages = state.messages.map(msg =>
               msg._id === tempId ? ack.message : msg
-            ),
-            lastMessageTimestamp: new Date(ack.message.createdAt).getTime()
-          }));
+            );
+            
+            // Make sure messages are sorted by creation time
+            const sortedMessages = [...updatedMessages].sort((a, b) => 
+              new Date(a.createdAt) - new Date(b.createdAt)
+            );
+            
+            return {
+              messages: sortedMessages,
+              lastMessageTimestamp: new Date(ack.message.createdAt).getTime()
+            };
+          });
 
           socketSuccess = true;
         } catch (socketError) {
@@ -326,12 +343,21 @@ export const useChatStore = create((set, get) => ({
         console.log("📤 Sending message via HTTP");
         const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
 
-        // Replace pending message with server response
-        set({
-          messages: messages
+        // Replace pending message with server response and ensure proper sorting
+        set(state => {
+          const updatedMessages = state.messages
             .filter(msg => msg._id !== tempId)
-            .concat(res.data),
-          lastMessageTimestamp: new Date(res.data.createdAt).getTime()
+            .concat(res.data);
+          
+          // Sort messages chronologically
+          const sortedMessages = [...updatedMessages].sort((a, b) => 
+            new Date(a.createdAt) - new Date(b.createdAt)
+          );
+          
+          return {
+            messages: sortedMessages,
+            lastMessageTimestamp: new Date(res.data.createdAt).getTime()
+          };
         });
       }
 
@@ -422,12 +448,22 @@ export const useChatStore = create((set, get) => ({
 
       const res = await axiosInstance.post(`/messages/reply/${messageId}`, messageData);
 
-      // Replace pending message with server response
-      set({
-        messages: messages
+      // Replace pending message with server response and ensure proper sorting
+      set(state => {
+        const updatedMessages = state.messages
           .filter(msg => msg._id !== tempId) // Remove temporary message
-          .concat(res.data), // Add confirmed message
-        replyingTo: null // Clear reply state
+          .concat(res.data); // Add confirmed message
+        
+        // Sort messages chronologically
+        const sortedMessages = [...updatedMessages].sort((a, b) => 
+          new Date(a.createdAt) - new Date(b.createdAt)
+        );
+        
+        return {
+          messages: sortedMessages,
+          replyingTo: null, // Clear reply state
+          lastMessageTimestamp: new Date(res.data.createdAt).getTime()
+        };
       });
 
       // Automatically refresh users list to update sidebar with latest conversation
@@ -504,27 +540,89 @@ export const useChatStore = create((set, get) => ({
   markMessagesAsDelivered: (messageIds) => {
     if (!messageIds || messageIds.length === 0) return;
 
+    console.log("📨 Marking messages as delivered:", messageIds);
+    
+    // Store messageIds for retry if needed
+    set(state => ({ pendingDeliveredMessages: [...(state.pendingDeliveredMessages || []), ...messageIds] }));
+
+    // First try via socket for real-time updates
     const socket = useAuthStore.getState().socket;
     if (socket && socket.connected) {
       socket.emit("messageDelivered", { messageIds });
     }
 
-    // Also update via API for reliability
+    // Always update via API for reliability, even if socket is connected
     axiosInstance.post("/messages/status/delivered", { messageIds })
-      .catch(error => console.error("Error marking messages as delivered:", error));
+      .then(() => {
+        // Remove from pending list on success
+        set(state => ({ 
+          pendingDeliveredMessages: (state.pendingDeliveredMessages || [])
+            .filter(id => !messageIds.includes(id))
+        }));
+      })
+      .catch(error => {
+        console.error("Error marking messages as delivered:", error);
+        // Will retry on next connection via pendingDeliveredMessages
+      });
+      
+    // Optimistic update in the UI
+    const currentMessages = get().messages;
+    const updatedMessages = currentMessages.map(message => {
+      if (messageIds.includes(message._id) && message.status !== 'seen') {
+        return {
+          ...message,
+          status: 'delivered',
+          deliveredAt: new Date()
+        };
+      }
+      return message;
+    });
+    
+    set({ messages: updatedMessages });
   },
 
   markMessagesAsSeen: (messageIds) => {
     if (!messageIds || messageIds.length === 0) return;
+    
+    console.log("👁️ Marking messages as seen:", messageIds);
+    
+    // Store messageIds for retry if needed
+    set(state => ({ pendingSeenMessages: [...(state.pendingSeenMessages || []), ...messageIds] }));
 
+    // First try via socket for real-time updates
     const socket = useAuthStore.getState().socket;
     if (socket && socket.connected) {
       socket.emit("messageSeen", { messageIds });
     }
 
-    // Also update via API for reliability
+    // Always update via API for reliability, even if socket is connected
     axiosInstance.post("/messages/status/seen", { messageIds })
-      .catch(error => console.error("Error marking messages as seen:", error));
+      .then(() => {
+        // Remove from pending list on success
+        set(state => ({ 
+          pendingSeenMessages: (state.pendingSeenMessages || [])
+            .filter(id => !messageIds.includes(id))
+        }));
+      })
+      .catch(error => {
+        console.error("Error marking messages as seen:", error);
+        // Will retry on next connection via pendingSeenMessages
+      });
+    
+    // Optimistic update in the UI
+    const currentMessages = get().messages;
+    const updatedMessages = currentMessages.map(message => {
+      if (messageIds.includes(message._id)) {
+        return {
+          ...message,
+          status: 'seen',
+          seenAt: new Date()
+        };
+      }
+      return message;
+    });
+    
+    set({ messages: updatedMessages });
   },
 
   updateLastSeen: () => {
@@ -639,12 +737,59 @@ export const useChatStore = create((set, get) => ({
     // Handle socket connection events
     socket.on('connect', () => {
       set({ connectionStatus: 'connected' });
-      console.log("Socket connected");
+      console.log("🔌 Socket connected successfully - ID:", socket.id);
+
+      // Process any pending message status updates
+      const pendingDelivered = get().pendingDeliveredMessages || [];
+      const pendingSeen = get().pendingSeenMessages || [];
+      const pendingEdits = get().pendingEdits || {};
+      
+      console.log("🔄 Processing pending updates on reconnection:", {
+        pendingDeliveredCount: pendingDelivered.length,
+        pendingSeenCount: pendingSeen.length,
+        pendingEditsCount: Object.keys(pendingEdits).length
+      });
+      
+      // Request updated online statuses immediately
+      socket.emit("getUserStatuses");
+      
+      // Process pending delivered messages
+      if (pendingDelivered.length > 0) {
+        socket.emit("messageDelivered", { messageIds: pendingDelivered });
+        console.log("📨 Re-sending pending delivered statuses:", pendingDelivered.length);
+      }
+      
+      // Process pending seen messages
+      if (pendingSeen.length > 0) {
+        socket.emit("messageSeen", { messageIds: pendingSeen });
+        console.log("�️ Re-sending pending seen statuses:", pendingSeen.length);
+      }
+      
+      // Process pending message edits
+      if (Object.keys(pendingEdits).length > 0) {
+        console.log("✏️ Re-sending pending message edits");
+        Object.entries(pendingEdits).forEach(([messageId, text]) => {
+          socket.emit("messageEdited", { messageId, text });
+        });
+      }
+      
+      // Force a data refresh for all relevant data to ensure sync
+      setTimeout(() => {
+        // Refresh data with a slight delay to ensure socket connection is fully established
+        get().getUsers();
+        get().getUnreadCounts();
+        
+        if (get().selectedUser) {
+          console.log("� Refreshing messages for current chat after reconnection");
+          get().getMessages(get().selectedUser._id);
+        }
+      }, 300); // Short delay for better reliability
 
       // Refresh data after reconnection
       get().getUsers();
       get().getUnreadCounts();
       if (get().selectedUser) {
+        console.log("🔄 Refreshing messages for current conversation with:", get().selectedUser.fullName);
         get().getMessages(get().selectedUser._id);
       }
     });
@@ -694,10 +839,16 @@ export const useChatStore = create((set, get) => ({
       if (currentSelectedUser && messageSenderId === currentSelectedUser._id) {
         console.log("✅ Adding message to current conversation (sender is selected user)");
         // Update last message timestamp for polling comparison
-        set(state => ({
-          messages: [...state.messages.filter(m => m._id !== newMessage._id), newMessage],
-          lastMessageTimestamp: new Date(newMessage.createdAt).getTime()
-        }));
+        set(state => {
+          // Sort messages chronologically after adding new message
+          const updatedMessages = [...state.messages.filter(m => m._id !== newMessage._id), newMessage]
+            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+          
+          return {
+            messages: updatedMessages,
+            lastMessageTimestamp: new Date(newMessage.createdAt).getTime()
+          };
+        });
 
         // Mark message as delivered immediately
         get().markMessagesAsDelivered([newMessage._id]);
@@ -749,10 +900,16 @@ export const useChatStore = create((set, get) => ({
         // If we're viewing the conversation with the recipient
         if (currentSelectedUser && newMessage.receiverId === currentSelectedUser._id) {
           console.log("✅ Adding own message to current conversation (multi-device sync)");
-          set(state => ({
-            messages: [...state.messages.filter(m => m._id !== newMessage._id), newMessage],
-            lastMessageTimestamp: new Date(newMessage.createdAt).getTime()
-          }));
+          set(state => {
+            // Sort messages chronologically after adding new message
+            const updatedMessages = [...state.messages.filter(m => m._id !== newMessage._id), newMessage]
+              .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+            
+            return {
+              messages: updatedMessages,
+              lastMessageTimestamp: new Date(newMessage.createdAt).getTime()
+            };
+          });
         }
 
         // Update users list to show latest conversation
@@ -787,10 +944,16 @@ export const useChatStore = create((set, get) => ({
       if (currentSelectedUser &&
          (messageSenderId === currentSelectedUser._id || message.receiverId === currentSelectedUser._id)) {
         console.log("✅ Adding new chat message to current conversation");
-        set(state => ({
-          messages: [...state.messages.filter(m => m._id !== message._id), message],
-          lastMessageTimestamp: new Date(message.createdAt).getTime()
-        }));
+        set(state => {
+          // Sort messages chronologically after adding new message
+          const updatedMessages = [...state.messages.filter(m => m._id !== message._id), message]
+            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+          
+          return {
+            messages: updatedMessages,
+            lastMessageTimestamp: new Date(message.createdAt).getTime()
+          };
+        });
 
         // Mark as delivered and seen if we're the receiver
         if (message.receiverId === currentUserId) {
@@ -836,39 +999,77 @@ export const useChatStore = create((set, get) => ({
 
     // Listen for message status updates
     socket.on("messageStatusUpdate", ({ messageIds, status, timestamp }) => {
+      console.log(`🔄 Received status update for ${messageIds.length} messages: ${status}`);
+      
       const currentMessages = get().messages;
+      if (!currentMessages || currentMessages.length === 0) {
+        console.log("⚠️ No messages in state to update");
+        return;
+      }
 
-      // Update the status of specific messages
+      // Only update messages that exist in our state and follow proper status progression
       const updatedMessages = currentMessages.map(message => {
         if (messageIds.includes(message._id)) {
-          return {
-            ...message,
-            status,
-            ...(status === 'delivered' ? { deliveredAt: timestamp } : {}),
-            ...(status === 'seen' ? { seenAt: timestamp } : {})
-          };
+          // Only update status if it's a logical progression
+          // (sent -> delivered -> seen, never backwards)
+          const shouldUpdate = (
+            (status === 'delivered' && message.status === 'sent') || 
+            (status === 'seen' && (message.status === 'sent' || message.status === 'delivered'))
+          );
+
+          if (shouldUpdate) {
+            return {
+              ...message,
+              status,
+              ...(status === 'delivered' ? { deliveredAt: new Date(timestamp) } : {}),
+              ...(status === 'seen' ? { seenAt: new Date(timestamp) } : {})
+            };
+          }
+          
+          // If message is already in a "higher" state, log and don't downgrade
+          if ((status === 'delivered' && message.status === 'seen') ||
+              (status === 'sent' && (message.status === 'delivered' || message.status === 'seen'))) {
+            console.log(`⚠️ Ignoring status downgrade for message ${message._id}: ${message.status} -> ${status}`);
+            return message;
+          }
         }
         return message;
       });
 
-      set({ messages: updatedMessages });
+      // Only update state if there are actual changes
+      if (JSON.stringify(currentMessages) !== JSON.stringify(updatedMessages)) {
+        console.log("✅ Updating message statuses in state");
+        set({ messages: updatedMessages });
+      } else {
+        console.log("ℹ️ No status changes needed");
+      }
 
       // Also update group messages if we're in a group chat
       const { selectedGroup, groupMessages } = useGroupStore.getState();
-      if (selectedGroup) {
+      if (selectedGroup && groupMessages && groupMessages.length > 0) {
         const updatedGroupMessages = groupMessages.map(message => {
           if (messageIds.includes(message._id)) {
-            return {
-              ...message,
-              status,
-              ...(status === 'delivered' ? { deliveredAt: timestamp } : {}),
-              ...(status === 'seen' ? { seenAt: timestamp } : {})
-            };
+            // Same progression logic as above
+            const shouldUpdate = (
+              (status === 'delivered' && message.status === 'sent') || 
+              (status === 'seen' && (message.status === 'sent' || message.status === 'delivered'))
+            );
+
+            if (shouldUpdate) {
+              return {
+                ...message,
+                status,
+                ...(status === 'delivered' ? { deliveredAt: new Date(timestamp) } : {}),
+                ...(status === 'seen' ? { seenAt: new Date(timestamp) } : {})
+              };
+            }
           }
           return message;
         });
 
-        useGroupStore.setState({ groupMessages: updatedGroupMessages });
+        if (JSON.stringify(groupMessages) !== JSON.stringify(updatedGroupMessages)) {
+          useGroupStore.setState({ groupMessages: updatedGroupMessages });
+        }
       }
     });
 
@@ -945,33 +1146,52 @@ export const useChatStore = create((set, get) => ({
     });
 
     // Listen for message deleted events
-    socket.on("messageDeleted", ({ messageId, deleteType }) => {
+    socket.on("messageDeleted", ({ messageId, deleteType, groupId }) => {
+      console.log("🗑️ Received message deletion event:", { messageId, deleteType, groupId });
       const currentMessages = get().messages;
-
+      
+      if (!currentMessages || currentMessages.length === 0) {
+        console.log("⚠️ No messages in state to delete");
+        return;
+      }
+      
+      // Check if the message exists in our current state
+      const existingMessageIndex = currentMessages.findIndex(msg => msg._id === messageId);
+      if (existingMessageIndex === -1) {
+        console.log("⚠️ Message to delete not found in current state:", messageId);
+        return;
+      }
+      
       if (deleteType === 'everyone') {
-        // For delete for everyone, we'll completely remove the message after a delay
+        console.log("🌍 Processing delete for everyone");
+        // For delete for everyone, mark the message as deleted with visual indication
         const updatedMessages = currentMessages.map(message => {
           if (message._id === messageId) {
             return {
               ...message,
               isDeleted: true,
               deletedFor: deleteType,
-              deletedAt: new Date()
+              deletedAt: new Date(),
+              text: '', // Clear text content
+              image: null // Remove image reference
             };
           }
           return message;
         });
 
         set({ messages: updatedMessages });
-
-        // Remove the message completely after a delay
+        console.log("✅ Updated message as deleted for everyone");
+        
+        // Optionally remove the message completely after a delay
+        // to improve user experience by showing "This message was deleted" for a while
         setTimeout(() => {
           set(state => ({
             messages: state.messages.filter(m => m._id !== messageId)
           }));
-        }, 3000);
+          console.log("🧹 Removed deleted message from UI after delay");
+        }, 30000); // Keep for 30 seconds before removing
       } else {
-        // For delete for me, just mark as deleted
+        // For delete for me, just mark as deleted locally
         const updatedMessages = currentMessages.map(message => {
           if (message._id === messageId) {
             return {
@@ -993,14 +1213,59 @@ export const useChatStore = create((set, get) => ({
 
     // Listen for message editing
     socket.on("messageEdited", (updatedMessage) => {
+      console.log("✏️ Received edited message update:", updatedMessage._id);
       const currentMessages = get().messages;
-
+      
+      if (!currentMessages || currentMessages.length === 0) {
+        console.log("⚠️ No messages in state to update after edit");
+        return;
+      }
+      
+      // Make sure the updated message has proper timestamps as Date objects
+      if (updatedMessage.createdAt && typeof updatedMessage.createdAt === 'string') {
+        updatedMessage.createdAt = new Date(updatedMessage.createdAt);
+      }
+      if (updatedMessage.updatedAt && typeof updatedMessage.updatedAt === 'string') {
+        updatedMessage.updatedAt = new Date(updatedMessage.updatedAt);
+      }
+      if (updatedMessage.editedAt && typeof updatedMessage.editedAt === 'string') {
+        updatedMessage.editedAt = new Date(updatedMessage.editedAt);
+      }
+      
+      // Check if the message exists in our current state
+      const existingMessage = currentMessages.find(msg => msg._id === updatedMessage._id);
+      
+      if (!existingMessage) {
+        console.log("⚠️ Edited message not found in current state:", updatedMessage._id);
+        return;
+      }
+      
       // Update the specific message
       const updatedMessages = currentMessages.map(message =>
-        message._id === updatedMessage._id ? updatedMessage : message
+        message._id === updatedMessage._id ? {
+          ...updatedMessage,
+          // Preserve status information that might not be in the update
+          status: message.status || updatedMessage.status,
+          deliveredAt: message.deliveredAt || updatedMessage.deliveredAt,
+          seenAt: message.seenAt || updatedMessage.seenAt,
+        } : message
       );
 
-      set({ messages: updatedMessages });
+      // Remove from pending edits if it exists
+      if (get().pendingEdits?.[updatedMessage._id]) {
+        set(state => {
+          const newPendingEdits = { ...(state.pendingEdits || {}) };
+          delete newPendingEdits[updatedMessage._id];
+          return { 
+            messages: updatedMessages,
+            pendingEdits: newPendingEdits
+          };
+        });
+      } else {
+        set({ messages: updatedMessages });
+      }
+      
+      console.log("✅ Updated edited message in state");
     });
 
     // Request initial user statuses when connected
@@ -1020,12 +1285,23 @@ export const useChatStore = create((set, get) => ({
 
     // Set up periodic polling for new messages as a backup to sockets
     const messagePollingInterval = setInterval(() => {
-      // Only poll if we're in a conversation and socket is not connected
-      if (get().selectedUser && get().connectionStatus !== 'connected') {
+      // Check if we have an active conversation and either:
+      // 1. Socket is disconnected, OR
+      // 2. It's been more than 15 seconds since our last message update
+      const selectedUser = get().selectedUser;
+      const connectionStatus = get().connectionStatus;
+      const lastMessageTimestamp = get().lastMessageTimestamp;
+      const now = Date.now();
+      
+      if (selectedUser && (
+        connectionStatus !== 'connected' || 
+        (lastMessageTimestamp && (now - lastMessageTimestamp > 15000))
+      )) {
+        console.log("🔄 Polling for new messages as backup mechanism");
         // Re-fetch messages for current conversation
-        get().getMessages(get().selectedUser._id);
+        get().getMessages(selectedUser._id);
       }
-    }, 10000); // Poll every 10 seconds if socket disconnected
+    }, 8000); // Poll every 8 seconds when needed
 
     // Store the interval IDs for cleanup
     set({
@@ -1136,6 +1412,14 @@ export const useChatStore = create((set, get) => ({
         return false;
       }
 
+      // Store edit in pending edits
+      set(state => ({
+        pendingEdits: {
+          ...(state.pendingEdits || {}),
+          [messageId]: text
+        }
+      }));
+
       // Optimistically update UI
       const currentMessages = get().messages;
       const updatedMessages = currentMessages.map(msg => {
@@ -1152,25 +1436,58 @@ export const useChatStore = create((set, get) => ({
       });
 
       set({ messages: updatedMessages });
-
-      // Call API to update the message
-      const res = await axiosInstance.put(`/messages/${messageId}`, { text });
-
-      // Emit socket event for real-time updates
+      
+      // Try socket first for immediate real-time updates
       const socket = useAuthStore.getState().socket;
+      let socketSuccess = false;
+      
       if (socket && socket.connected) {
-        socket.emit("messageEdited", { messageId, text });
+        try {
+          await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error("Socket timeout")), 3000);
+            
+            socket.emit("messageEdited", { messageId, text }, (ack) => {
+              clearTimeout(timeout);
+              if (ack && ack.success) {
+                resolve(true);
+              } else {
+                reject(new Error(ack?.error || "Socket edit failed"));
+              }
+            });
+          });
+          socketSuccess = true;
+          console.log("✅ Message edited via socket successfully");
+        } catch (socketError) {
+          console.warn("⚠️ Socket edit failed, falling back to HTTP:", socketError);
+        }
       }
+      
+      // Always call API for reliability
+      const res = await axiosInstance.put(`/messages/${messageId}`, { text });
+      
+      // Remove from pending edits
+      set(state => {
+        const newPendingEdits = { ...(state.pendingEdits || {}) };
+        delete newPendingEdits[messageId];
+        return { pendingEdits: newPendingEdits };
+      });
 
       return true;
     } catch (error) {
       console.error("Error editing message:", error);
       toast.error(error.response?.data?.message || "Failed to edit message");
 
-      // Revert changes on error
-      if (get().selectedUser) {
-        await get().getMessages(get().selectedUser._id);
-      }
+      // Keep in pending edits for retry
+      setTimeout(() => {
+        // Retry edit if socket reconnects
+        const socket = useAuthStore.getState().socket;
+        if (socket && socket.connected) {
+          const pendingText = get().pendingEdits?.[messageId];
+          if (pendingText) {
+            socket.emit("messageEdited", { messageId, text: pendingText });
+          }
+        }
+      }, 5000);
 
       return false;
     }

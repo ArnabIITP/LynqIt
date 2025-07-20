@@ -206,26 +206,28 @@ export const useAuthStore = create((set, get) => ({
     const socket = io(socketURL, {
       query: {
         userId: authUser._id,
+        clientTime: new Date().toISOString() // Send client time for synchronization
       },
-      // Optimized reconnection settings
+      // Enhanced reconnection settings for better real-time reliability
       reconnection: true,
-      reconnectionAttempts: 15,        // More attempts
-      reconnectionDelay: 500,          // Faster initial reconnect
-      reconnectionDelayMax: 3000,      // Lower max delay
-      timeout: 10000,                  // Faster timeout
+      reconnectionAttempts: 20,        // More attempts for persistence
+      reconnectionDelay: 300,          // Faster initial reconnect
+      reconnectionDelayMax: 2000,      // Lower max delay for better responsiveness
+      timeout: 8000,                   // Faster timeout
       forceNew: false,                 // Reuse existing connection
-
-      // Transport optimization
-      transports: ['websocket', 'polling'], // Prefer websocket
+      
+      // More aggressive transport optimization
+      transports: ['websocket', 'polling'], // Prefer websocket but allow polling fallback
       upgrade: true,                   // Allow transport upgrades
       rememberUpgrade: true,           // Remember successful upgrades
-
+      
       // Performance settings
       autoConnect: true,               // Auto connect on creation
       multiplex: true,                 // Allow multiplexing
       
-      // Explicit path
-      path: '/socket.io'
+      // Explicit path and other optimizations
+      path: '/socket.io',
+      withCredentials: true            // Include credentials for cross-domain support
     });
 
     set({ socket: socket });
@@ -276,9 +278,16 @@ export const useAuthStore = create((set, get) => ({
 
   handleSocketReconnect: () => {
     const currentAttempts = get().socketReconnectAttempts;
+    const { authUser } = get();
+    
+    // Don't try to reconnect if user is not logged in
+    if (!authUser) {
+      console.log("Not attempting to reconnect socket - user not logged in");
+      return;
+    }
 
     // If we've tried too many times, stop trying
-    if (currentAttempts >= 10) {
+    if (currentAttempts >= 15) {
       console.error("Maximum socket reconnection attempts reached");
       return;
     }
@@ -289,11 +298,25 @@ export const useAuthStore = create((set, get) => ({
     }
 
     // Increase backoff time with each attempt (1s, 2s, 4s, etc.)
-    const delay = Math.min(1000 * Math.pow(2, currentAttempts), 30000);
+    const delay = Math.min(1000 * Math.pow(1.5, currentAttempts), 20000);
+
+    console.log(`Will attempt to reconnect socket in ${delay/1000} seconds (attempt ${currentAttempts + 1})`);
 
     // Set up new reconnect timer
     const timer = setTimeout(() => {
-      console.log(`Attempting to reconnect socket (attempt ${currentAttempts + 1})`);
+      console.log(`🔄 Attempting to reconnect socket (attempt ${currentAttempts + 1})`);
+      
+      // Forcefully disconnect existing socket if it exists but isn't properly connected
+      if (get().socket && !get().socket.connected) {
+        try {
+          get().socket.disconnect();
+          console.log("Forcefully disconnected stale socket connection");
+        } catch (error) {
+          console.error("Error disconnecting stale socket:", error);
+        }
+      }
+      
+      // Try to reconnect
       get().connectSocket();
     }, delay);
 
