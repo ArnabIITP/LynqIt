@@ -376,11 +376,24 @@ export const useGroupStore = create((set, get) => ({
                 await axiosInstance.post(`/messages/mentions/${groupId}/read`);
               }
 
-              // Force refresh groups list to immediately update badges
+              // Update badges without a full reload
               console.log("🔄 Auto-clearing badges for viewed group message");
-              setTimeout(() => {
-                get().getGroups();
-              }, 100);
+              set(state => {
+                const groupIndex = state.groups.findIndex(g => g._id === groupId);
+                
+                if (groupIndex !== -1) {
+                  const updatedGroups = [...state.groups];
+                  updatedGroups[groupIndex] = {
+                    ...updatedGroups[groupIndex],
+                    unreadCount: 0,
+                    mentionCount: 0
+                  };
+                  
+                  return { groups: updatedGroups };
+                }
+                
+                return {};
+              });
             } catch (error) {
               console.error("Error auto-marking group as read:", error);
             }
@@ -440,11 +453,50 @@ export const useGroupStore = create((set, get) => ({
         )
       }));
 
-      // Force refresh groups list to update sidebar with latest message info
-      console.log("🔄 Force refreshing groups list due to new message");
-      setTimeout(() => {
-        get().getGroups();
-      }, 100);
+      // Update groups list without a full reload
+      console.log("🔄 Updating group in sidebar with latest message");
+      set(state => {
+        const updatedGroups = [...state.groups];
+        
+        // Find the group in the list
+        const groupIndex = updatedGroups.findIndex(g => g._id === groupId);
+        if (groupIndex !== -1) {
+          // Update the group with last message info
+          const updatedGroup = {
+            ...updatedGroups[groupIndex],
+            lastMessage: message,
+            lastActivity: new Date().toISOString()
+          };
+          
+          // If we're not the sender, increment unread count
+          const currentUserId = useAuthStore.getState().authUser._id;
+          const messageSenderId = typeof message.senderId === 'object' ? message.senderId._id : message.senderId;
+          
+          if (messageSenderId !== currentUserId) {
+            // Check if the user is mentioned
+            const isMentioned = message.mentions && message.mentions.some(mention => 
+              (typeof mention.user === 'object' ? mention.user._id : mention.user) === currentUserId);
+            
+            if (isMentioned) {
+              updatedGroup.mentionCount = (updatedGroup.mentionCount || 0) + 1;
+            }
+            
+            updatedGroup.unreadCount = (updatedGroup.unreadCount || 0) + 1;
+          }
+          
+          // Remove group from current position
+          updatedGroups.splice(groupIndex, 1);
+          
+          // Move to top (after pinned groups)
+          const firstNonPinnedIndex = updatedGroups.findIndex(g => !g.isPinned);
+          const insertPosition = firstNonPinnedIndex === -1 ? 0 : firstNonPinnedIndex;
+          updatedGroups.splice(insertPosition, 0, updatedGroup);
+          
+          return { groups: updatedGroups };
+        }
+        
+        return {};
+      });
     });
 
     // Listen for new groups
@@ -557,16 +609,26 @@ export const useGroupStore = create((set, get) => ({
     // Listen for unread count updates (shared with chat store)
     socket.on("unreadCountUpdate", (unreadCounts) => {
       console.log("📊 Received unread count update in group store:", unreadCounts);
+      
       // Update the chat store's unread counts since it's the source of truth
       // Import at runtime to avoid circular dependency
       import('./useChatStore').then(({ useChatStore }) => {
         useChatStore.setState({ unreadCounts });
       });
 
-      // Force refresh groups list to update sidebar with latest unread counts
-      setTimeout(() => {
-        get().getGroups();
-      }, 100);
+      // Update the groups with unread counts without a full reload
+      set(state => {
+        const updatedGroups = state.groups.map(group => {
+          // Update group with unread count and mention info
+          return {
+            ...group,
+            unreadCount: unreadCounts.groups[group._id] || 0,
+            mentionCount: unreadCounts.mentions[group._id] || 0
+          };
+        });
+        
+        return { groups: updatedGroups };
+      });
     });
 
     // Listen for message status updates

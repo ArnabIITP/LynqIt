@@ -126,29 +126,43 @@ const ChatContainer = () => {
 
   useEffect(() => {
     // If connection is lost, try to reconnect after a delay
+    // But only do this once, not continuously
+    let reconnectAttempts = 0;
+    let reconnectTimer;
+    
     if (connectionStatus === 'disconnected') {
-      const reconnectTimer = setTimeout(() => {
+      // Use exponential backoff for reconnection attempts
+      reconnectTimer = setTimeout(() => {
+        console.log(`Attempting reconnection #${reconnectAttempts + 1}`);
         handleSocketReconnect();
-      }, 3000);
-
+        reconnectAttempts++;
+      }, Math.min(3000 * Math.pow(1.5, reconnectAttempts), 15000)); // Cap at 15 seconds
+      
       return () => clearTimeout(reconnectTimer);
     }
   }, [connectionStatus, handleSocketReconnect]);
 
-  // Add polling for messages when the socket is disconnected but we have an active chat
+  // Add smarter polling for messages when the socket is disconnected but we have an active chat
   useEffect(() => {
     let pollingInterval;
 
-    if (connectionStatus !== 'connected' && (selectedUser || selectedGroup)) {
-      // Poll for new messages every 5 seconds when socket is disconnected
+    if (connectionStatus === 'disconnected' && (selectedUser || selectedGroup)) {
+      // Use a longer interval to prevent excessive requests
       pollingInterval = setInterval(() => {
         console.log("Polling for new messages due to disconnected socket");
-        if (selectedUser) {
-          getMessages(selectedUser._id);
-        } else if (selectedGroup) {
-          getGroupMessages(selectedGroup._id);
+        
+        // Check connection status before attempting to get messages
+        const currentConnectionStatus = useChatStore.getState().connectionStatus;
+        if (currentConnectionStatus === 'connected') {
+          if (selectedUser) {
+            getMessages(selectedUser._id);
+          } else if (selectedGroup) {
+            getGroupMessages(selectedGroup._id);
+          }
+        } else {
+          console.log("Skipping message poll while disconnected");
         }
-      }, 5000);
+      }, 8000); // Increased interval to reduce server load
     }
 
     return () => {
@@ -512,13 +526,35 @@ const ChatContainer = () => {
 
 
 
+  // Display a non-intrusive connection status message
   const renderConnectionStatus = () => {
-    if (connectionStatus === 'disconnected') {
+    // Only show status if not connected
+    // And only show disconnection error once the state persists
+    const [showDisconnected, setShowDisconnected] = useState(false);
+    
+    useEffect(() => {
+      let timer;
+      if (connectionStatus === 'disconnected') {
+        // Only show the disconnected message after a delay
+        // to avoid flashing messages for brief disconnections
+        timer = setTimeout(() => {
+          setShowDisconnected(true);
+        }, 5000);
+      } else {
+        setShowDisconnected(false);
+      }
+      
+      return () => {
+        if (timer) clearTimeout(timer);
+      };
+    }, [connectionStatus]);
+    
+    if (connectionStatus === 'disconnected' && showDisconnected) {
       return (
         <div className="flex items-center justify-center my-2">
-          <div className="bg-error/20 text-error px-4 py-2 rounded-full flex items-center gap-2 text-sm">
+          <div className="bg-error/10 text-error px-4 py-2 rounded-full flex items-center gap-2 text-sm">
             <AlertTriangle size={16} />
-            <span>Connection lost. Reconnecting...</span>
+            <span>Connection lost</span>
             <button
               className="btn btn-xs btn-error btn-outline ml-2"
               onClick={handleSocketReconnect}
@@ -534,9 +570,9 @@ const ChatContainer = () => {
     if (connectionStatus === 'connecting') {
       return (
         <div className="flex items-center justify-center my-2">
-          <div className="bg-warning/20 text-warning px-4 py-2 rounded-full flex items-center gap-2 text-sm">
+          <div className="bg-warning/10 text-warning px-4 py-2 rounded-full flex items-center gap-2 text-sm">
             <span className="loading loading-spinner loading-xs"></span>
-            <span>Connecting to chat server...</span>
+            <span>Connecting...</span>
           </div>
         </div>
       );

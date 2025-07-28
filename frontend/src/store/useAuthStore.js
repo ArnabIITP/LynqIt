@@ -260,9 +260,32 @@ export const useAuthStore = create((set, get) => ({
     socket.on("disconnect", (reason) => {
       console.log("Socket disconnected:", reason);
 
+      // Inform other stores about disconnection
+      try {
+        // Update the chat store connection status without triggering a reconnect loop
+        import('./useChatStore').then(module => {
+          const useChatStore = module.useChatStore;
+          if (useChatStore) {
+            useChatStore.setState({ connectionStatus: 'disconnected' });
+          }
+        }).catch(err => console.error("Failed to update chat store:", err));
+      } catch (error) {
+        console.error("Error updating connection status in other stores:", error);
+      }
+
       // If the disconnection wasn't intentional, try to reconnect
-      if (reason !== "io client disconnect") {
-        get().handleSocketReconnect();
+      // But avoid reconnecting for certain reasons to prevent infinite reconnection loops
+      const intentionalDisconnects = ["io client disconnect", "forced close"];
+      if (!intentionalDisconnects.includes(reason)) {
+        // Use exponential backoff based on number of attempts
+        const attempts = get().socketReconnectAttempts;
+        const backoffDelay = Math.min(1000 * Math.pow(1.5, attempts), 10000); // Cap at 10 seconds
+        
+        console.log(`Will attempt reconnection in ${backoffDelay}ms (attempt ${attempts + 1})`);
+        
+        setTimeout(() => {
+          get().handleSocketReconnect();
+        }, backoffDelay);
       }
     });
 
@@ -280,15 +303,42 @@ export const useAuthStore = create((set, get) => ({
     const currentAttempts = get().socketReconnectAttempts;
     const { authUser } = get();
     
+    // Update UI status first to provide immediate feedback
+    try {
+      import('./useChatStore').then(module => {
+        const useChatStore = module.useChatStore;
+        if (useChatStore) {
+          useChatStore.setState({ connectionStatus: 'connecting' });
+        }
+      }).catch(err => console.error("Failed to update chat store:", err));
+    } catch (error) {
+      console.error("Error updating connection status:", error);
+    }
+    
     // Don't try to reconnect if user is not logged in
     if (!authUser) {
       console.log("Not attempting to reconnect socket - user not logged in");
       return;
     }
 
-    // If we've tried too many times, stop trying
+    // If we've tried too many times, stop trying frequently but keep trying occasionally
     if (currentAttempts >= 15) {
-      console.error("Maximum socket reconnection attempts reached");
+      console.log("Maximum socket reconnection attempts reached, switching to longer interval");
+      // Clear any existing timer
+      if (get().socketReconnectTimer) {
+        clearTimeout(get().socketReconnectTimer);
+      }
+      
+      // Try one more time after a longer delay (30s)
+      const timer = setTimeout(() => {
+        console.log("Making one more reconnection attempt after timeout");
+        get().connectSocket();
+        
+        // Reset attempts to allow reconnection attempts to start over
+        set({ socketReconnectAttempts: 5 });
+      }, 30000);
+      
+      set({ socketReconnectTimer: timer });
       return;
     }
 
@@ -297,8 +347,9 @@ export const useAuthStore = create((set, get) => ({
       clearTimeout(get().socketReconnectTimer);
     }
 
-    // Increase backoff time with each attempt (1s, 2s, 4s, etc.)
-    const delay = Math.min(1000 * Math.pow(1.5, currentAttempts), 20000);
+    // Increase backoff time with each attempt using a different formula
+    // This gives more attempts at first but slower later
+    const delay = Math.min(1000 * Math.pow(1.3, currentAttempts), 15000);
 
     console.log(`Will attempt to reconnect socket in ${delay/1000} seconds (attempt ${currentAttempts + 1})`);
 
@@ -306,18 +357,22 @@ export const useAuthStore = create((set, get) => ({
     const timer = setTimeout(() => {
       console.log(`🔄 Attempting to reconnect socket (attempt ${currentAttempts + 1})`);
       
-      // Forcefully disconnect existing socket if it exists but isn't properly connected
+      // Only try to disconnect the socket if it exists and isn't connected
       if (get().socket && !get().socket.connected) {
         try {
-          get().socket.disconnect();
-          console.log("Forcefully disconnected stale socket connection");
+          // Instead of disconnecting, try to re-use the existing socket
+          get().socket.connect();
+          console.log("Attempting to reconnect existing socket");
         } catch (error) {
-          console.error("Error disconnecting stale socket:", error);
+          console.error("Error reconnecting socket:", error);
+          
+          // If reconnection fails, try to create a new socket
+          get().connectSocket();
         }
+      } else {
+        // Create a new socket
+        get().connectSocket();
       }
-      
-      // Try to reconnect
-      get().connectSocket();
     }, delay);
 
     set({
