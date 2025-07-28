@@ -413,11 +413,17 @@ const ChatContainer = () => {
     // If it's a group message with mentions, highlight them
     if (isGroupChat && message.mentions && message.mentions.length > 0) {
       let text = displayText;
+      
+      // Get sender info for determining if this is the user's message
+      const isMyMessage = message.senderId === authUser._id || message.senderId._id === authUser._id;
 
-      // Replace mentions with highlighted spans
+      // Replace mentions with highlighted spans - different styling based on if it's the user's message or not
       message.mentions.forEach(mention => {
         const mentionRegex = new RegExp(`@${mention.username}`, 'gi');
-        text = text.replace(mentionRegex, `<span class="bg-primary/20 text-primary px-1 rounded">@${mention.username}</span>`);
+        const mentionStyle = isMyMessage 
+          ? `<span class="bg-primary-content/20 text-primary-content font-medium px-1 rounded">@${mention.username}</span>`
+          : `<span class="bg-primary/20 text-primary font-medium px-1 rounded">@${mention.username}</span>`;
+        text = text.replace(mentionRegex, mentionStyle);
       });
 
       return (
@@ -428,31 +434,36 @@ const ChatContainer = () => {
       );
     }
 
-    return <div className="break-words">{displayText}</div>;
+    return <div className="break-words font-normal">{displayText}</div>;
   };
 
   const renderMediaContent = (message) => {
     if (!message.image) return null;
 
+    // Get sender info for determining if this is the user's message
+    const isMyMessage = message.senderId === authUser._id || message.senderId._id === authUser._id;
+    const bgClass = isMyMessage ? 'bg-primary-content/10' : 'bg-base-300';
+    const textClass = isMyMessage ? 'text-primary-content' : 'text-base-content';
+
     switch (message.mediaType) {
       case 'video':
         return (
           <div
-            className="relative rounded-md mb-2 cursor-pointer hover:opacity-90 transition-opacity bg-base-300 p-2 flex items-center gap-2"
+            className={`relative rounded-md mb-2 cursor-pointer hover:opacity-90 transition-opacity ${bgClass} p-2 flex items-center gap-2`}
             onClick={() => handleMediaClick(message.image, 'video')}
           >
-            <Film size={20} />
-            <span className="text-sm">Video attachment</span>
+            <Film size={20} className={textClass} />
+            <span className={`text-sm ${textClass}`}>Video attachment</span>
           </div>
         );
       case 'document':
         return (
           <div
-            className="relative rounded-md mb-2 cursor-pointer hover:opacity-90 transition-opacity bg-base-300 p-2 flex items-center gap-2"
+            className={`relative rounded-md mb-2 cursor-pointer hover:opacity-90 transition-opacity ${bgClass} p-2 flex items-center gap-2`}
             onClick={() => handleMediaClick(message.image, 'document')}
           >
-            <FileText size={20} />
-            <span className="text-sm">Document attachment</span>
+            <FileText size={20} className={textClass} />
+            <span className={`text-sm ${textClass}`}>Document attachment</span>
           </div>
         );
       case 'gif':
@@ -462,7 +473,7 @@ const ChatContainer = () => {
           <img
             src={message.image}
             alt="Attachment"
-            className="sm:max-w-[200px] rounded-md mb-2 cursor-pointer hover:opacity-90 transition-opacity"
+            className="sm:max-w-[200px] rounded-md mb-2 cursor-pointer hover:opacity-90 transition-opacity border border-base-300"
             onClick={() => handleMediaClick(message.image, message.mediaType || 'image')}
           />
         );
@@ -485,7 +496,9 @@ const ChatContainer = () => {
             <button
               key={emoji}
               className={`text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1
-                ${isUserReaction ? 'bg-primary/20 font-medium' : 'bg-base-300 hover:bg-base-200'}`}
+                ${isUserReaction 
+                  ? 'bg-primary/30 text-primary-content font-medium border border-primary/20' 
+                  : 'bg-base-200 hover:bg-base-300 text-base-content border border-base-300'}`}
               onClick={() => handleQuickReaction(message._id, emoji)}
             >
               <span>{emoji}</span>
@@ -630,11 +643,11 @@ const ChatContainer = () => {
               <div className="chat-header mb-1 flex items-center">
                 {/* Show sender name in group chats */}
                 {isGroupChat && !isMyMessage && (
-                  <div className="text-sm font-medium text-base-content/80 mr-2">
+                  <div className="text-sm font-medium text-base-content/90 mr-2">
                     {senderInfo}
                   </div>
                 )}
-                <time className="text-xs opacity-50 ml-1" key={`time-${timeFormatKey}`}>
+                <time className="text-xs text-base-content/70 ml-1" key={`time-${timeFormatKey}`}>
                   {formatMessageTime(message.createdAt)}
                 </time>
                 <div className="relative ml-1">                  <button
@@ -700,7 +713,7 @@ const ChatContainer = () => {
                 </div>
               </div>
               <div
-                className="chat-bubble flex flex-col group relative"
+                className={`chat-bubble flex flex-col group relative ${isMyMessage ? 'bg-primary text-primary-content' : 'bg-base-200 text-base-content'}`}
                 onContextMenu={(e) => handleRightClick(e, message)}
               >
                 {/* Show replied message if this is a reply */}
@@ -741,7 +754,7 @@ const ChatContainer = () => {
 
                 {/* Quick reaction button - position based on message alignment */}
                 <div
-                  className={`absolute -top-10 z-10 invisible group-hover:visible bg-base-300 rounded-full p-0.5 flex items-center shadow-md whitespace-nowrap ${
+                  className={`absolute -top-10 z-10 invisible group-hover:visible bg-base-200 rounded-full p-0.5 flex items-center shadow-md whitespace-nowrap border border-base-300 ${
                     isMyMessage ? 'right-0' : 'left-0'
                   }`}
                 >
