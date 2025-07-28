@@ -101,14 +101,12 @@ const Sidebar = () => {
     }
   }, [searchQuery, getAllUsers]);
 
-  // Listen for chat updates without full refresh
+  // Listen for refreshChat events from the server
   useEffect(() => {
     if (!socket) return;
 
-    // Use more targeted approach instead of full refresh
     const handleRefreshChats = () => {
-      console.log("📝 Received refreshChats event - skipping full reload");
-      // We no longer call getUsers() here as our real-time updates will handle this
+      getUsers();
     };
 
     socket.on("refreshChats", handleRefreshChats);

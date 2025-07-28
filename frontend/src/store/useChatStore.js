@@ -81,16 +81,6 @@ export const useChatStore = create((set, get) => ({
   },
 
   getMessages: async (userId) => {
-    // Check connection status first
-    const connectionStatus = get().connectionStatus;
-    
-    // If we're disconnected, don't try to load messages
-    if (connectionStatus === 'disconnected') {
-      console.log("Not loading messages while disconnected");
-      set({ isMessagesLoading: false });
-      return;
-    }
-    
     set({ isMessagesLoading: true });
     try {
       const res = await axiosInstance.get(`/messages/${userId}`);
@@ -129,40 +119,20 @@ export const useChatStore = create((set, get) => ({
           get().markChatAsRead('direct', userId);
         }
       }, 1000);
-      
-      // If we got here, connection is working
-      set({ connectionStatus: 'connected' });
     } catch (error) {
       console.error("Error in getMessages:", error);
-      
-      // Only show toast error once, not repeatedly
-      if (get().connectionStatus === 'connected') {
-        toast.error("Failed to load messages");
-      }
+      toast.error(error.response?.data?.message || "Failed to load messages");
 
-      // Update connection status
-      set({ connectionStatus: 'disconnected' });
-      
-      // Try to reconnect socket, but only after a short delay to prevent storms
-      setTimeout(() => {
-        get().handleSocketReconnect();
-      }, 3000);
+      // If there was an error loading messages, try to reconnect socket
+      get().handleSocketReconnect();
     } finally {
       set({ isMessagesLoading: false });
     }
   },
 
-  // Handle socket disconnection and reconnection with improved error management
+  // Handle socket disconnection and reconnection
   handleSocketReconnect: () => {
     const socket = useAuthStore.getState().socket;
-    const currentStatus = get().connectionStatus;
-    
-    // Prevent multiple reconnection attempts in quick succession
-    if (currentStatus === 'connecting') {
-      console.log("Already attempting to reconnect, skipping additional attempt");
-      return;
-    }
-    
     if (socket) {
       // Check socket status
       if (!socket.connected) {
@@ -173,10 +143,8 @@ export const useChatStore = create((set, get) => ({
 
         // Re-subscribe to messages
         get().resubscribeToMessages();
-        
-        // Only show toast the first time, not on every reconnection attempt
-        // This prevents spamming the UI with notifications
-        console.log("Attempting to reconnect to chat server...");
+
+        toast.success("Reconnecting to chat server...");
       }
     } else {
       // No socket, try to create a new one
@@ -191,10 +159,9 @@ export const useChatStore = create((set, get) => ({
           toast.success("Chat connection restored");
         } else {
           set({ connectionStatus: 'disconnected' });
-          // Don't show an error toast on every reconnection attempt
-          console.error("Could not connect to chat server");
+          toast.error("Could not connect to chat server. Please refresh the page.");
         }
-      }, 3000); // Increased timeout for reconnection
+      }, 2000);
     }
   },
 
@@ -921,39 +888,9 @@ export const useChatStore = create((set, get) => ({
           }
         }
         
-        // Update the users list without a full reload to show the latest message
-        set(state => {
-          const currentUsers = [...state.users];
-          // Find the user in the list
-          const userIndex = currentUsers.findIndex(user => user._id === messageSenderId);
-          
-          if (userIndex !== -1) {
-            // Update the lastMessage for this user
-            const updatedUser = {
-              ...currentUsers[userIndex],
-              lastMessage: newMessage
-            };
-            
-            // Remove user from current position
-            currentUsers.splice(userIndex, 1);
-            
-            // Move to top (after pinned users)
-            const firstNonPinnedIndex = currentUsers.findIndex(u => !u.isPinned);
-            const insertPosition = firstNonPinnedIndex === -1 ? 0 : firstNonPinnedIndex;
-            currentUsers.splice(insertPosition, 0, updatedUser);
-            
-            return { users: currentUsers };
-          }
-          
-          // If the user isn't in our list yet (rare case), do a full refresh
-          if (userIndex === -1) {
-            console.log("🔄 User not found in list, performing full refresh");
-            get().getUsers();
-          }
-          
-          return {};
-        });
-        
+        // Force update the users list to show the latest message in the sidebar
+        get().getUsers();
+
         // The unread counts will be updated via socket event "unreadCountUpdate"
         // No need to manually call getUnreadCounts() here
       }
@@ -975,31 +912,8 @@ export const useChatStore = create((set, get) => ({
           });
         }
 
-        // Update users list to show latest conversation without a full reload
-        set(state => {
-          const currentUsers = [...state.users];
-          // Find the receiver in the list
-          const userIndex = currentUsers.findIndex(user => user._id === newMessage.receiverId);
-          
-          if (userIndex !== -1) {
-            // Update the lastMessage for this conversation
-            const updatedUser = {
-              ...currentUsers[userIndex],
-              lastMessage: newMessage
-            };
-            
-            // Remove user from current position
-            currentUsers.splice(userIndex, 1);
-            
-            // Move to top (after pinned users)
-            const firstNonPinnedIndex = currentUsers.findIndex(u => !u.isPinned);
-            const insertPosition = firstNonPinnedIndex === -1 ? 0 : firstNonPinnedIndex;
-            currentUsers.splice(insertPosition, 0, updatedUser);
-            
-            return { users: currentUsers };
-          }
-          return {};
-        });
+        // Update users list to show latest conversation
+        get().getUsers();
       }
 
       console.log("🔄 Finished processing new message");
@@ -1055,49 +969,17 @@ export const useChatStore = create((set, get) => ({
         console.log("📬 Received new message from different user - unread count will be updated via Socket.IO");
       }
 
-      // Update the users list to show the new chat without a full reload
-      set(state => {
-        const currentUsers = [...state.users];
-        // Only add the user if they're not already in the list (redundant check but safe)
-        if (!currentUsers.some(u => u._id === user._id)) {
-          // Add new user with the message as lastMessage
-          const newUser = {
-            ...user,
-            lastMessage: message
-          };
-          
-          // Add at the top (after pinned users)
-          const firstNonPinnedIndex = currentUsers.findIndex(u => !u.isPinned);
-          const insertPosition = firstNonPinnedIndex === -1 ? 0 : firstNonPinnedIndex;
-          currentUsers.splice(insertPosition, 0, newUser);
-          
-          return { users: currentUsers };
-        }
-        return {};
-      });
+      // Refresh the users list to update sidebar with latest message info
+      get().getUsers();
     });
 
-    // Listen for refreshChats events from the server but handle them more efficiently
+    // Listen for refreshChats events from the server
     socket.on("refreshChats", () => {
-      console.log("📝 Handling refreshChats with optimized approach");
-      
-      // Instead of reloading everything, only refresh unread counts
-      get().getUnreadCounts();
-      
-      // If a chat is currently open, make sure messages are up to date
+      get().getUsers();
+
+      // If a chat is currently open, refresh messages
       if (get().selectedUser) {
-        // Only refresh messages if we haven't received any recently via real-time events
-        const now = Date.now();
-        const lastMessage = get().lastMessageTimestamp;
-        const timeSinceLastUpdate = lastMessage ? now - lastMessage : Infinity;
-        
-        // If it's been more than 5 seconds since our last message update, refresh
-        if (timeSinceLastUpdate > 5000) {
-          console.log("🔄 No recent message updates, fetching latest messages");
-          get().getMessages(get().selectedUser._id);
-        } else {
-          console.log("✅ Recent real-time updates exist, skipping refresh");
-        }
+        get().getMessages(get().selectedUser._id);
       }
     });
 
@@ -1209,24 +1091,12 @@ export const useChatStore = create((set, get) => ({
     // Listen for unread count updates
     socket.on("unreadCountUpdate", (unreadCounts) => {
       console.log("📊 Received real-time unread count update:", unreadCounts);
-      
-      // Update the unread counts
-      set(state => {
-        // Update the users list with unread counts without a full reload
-        const updatedUsers = state.users.map(user => {
-          // Update unread count badge
-          const unreadCount = unreadCounts.personal[user._id] || 0;
-          return {
-            ...user,
-            unreadCount // Add the unread count directly to the user object
-          };
-        });
-        
-        return { 
-          unreadCounts,
-          users: updatedUsers
-        };
-      });
+      set({ unreadCounts });
+
+      // Force refresh users list to update sidebar with new unread counts
+      setTimeout(() => {
+        get().getUsers();
+      }, 100);
     });
 
     // Listen for mention notifications
