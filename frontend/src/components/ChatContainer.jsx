@@ -1,10 +1,12 @@
 import { useChatStore } from "../store/useChatStore";
 import { useGroupStore } from "../store/useGroupStore";
+import { useAIStore } from "../store/useAIStore";
 import { useEffect, useRef, useState } from "react";
 
 import ChatHeader from "./ChatHeader";
 import MessageInput from "./MessageInput";
 import MessageSkeleton from "./skeletons/MessageSkeleton";
+import AIChatContainer from "./AIChatContainer";
 import { useAuthStore } from "../store/useAuthStore";
 import { formatMessageTime, groupMessagesByDate, formatStatusTime } from "../utils/dateUtils";
 import DateSeparator from "./DateSeparator";
@@ -41,6 +43,9 @@ const ChatContainer = () => {
   } = useGroupStore();
 
   // Decryption removed - all messages are plain text
+
+  // Add AI assistant store
+  const { isSelected: isAISelected } = useAIStore();
 
   const { authUser } = useAuthStore();
   const messageEndRef = useRef(null);
@@ -576,6 +581,11 @@ const ChatContainer = () => {
         <MessageInput />
       </div>
     );
+  }
+
+  // If AI Assistant is selected, show the AI chat interface
+  if (isAISelected) {
+    return <AIChatContainer />;
   }
 
   return (

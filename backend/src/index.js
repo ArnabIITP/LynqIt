@@ -9,6 +9,13 @@ import { fileURLToPath } from "url";
 
 import { connectDB } from "./lib/db.js";
 
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log('Created uploads directory:', uploadsDir);
+}
+
 import authRoutes from "./routes/auth.route.js";
 import messageRoutes from "./routes/message.route.js";
 import groupRoutes from "./routes/group.route.js";
@@ -16,6 +23,7 @@ import twofaRoutes from "./routes/twofa.route.js";
 import userRoutes from "./routes/user.route.js";
 import statusRoutes from "./routes/status.route.js";
 import supportRoutes from "./routes/support.route.js";
+import aiRoutes from "./routes/ai.route.js";
 import { app, server } from "./lib/socket.js";
 
 dotenv.config();
@@ -39,17 +47,11 @@ const getAllowedOrigins = () => {
       'https://lynqit.onrender.com',
       'https://www.lynqit.onrender.com',
       // Also allow localhost for testing production builds locally
-      'http://localhost:5173',
-      'http://localhost:3000',
-      'http://127.0.0.1:5173',
-      'http://127.0.0.1:3000'
     ];
   } else {
     return [
       'http://localhost:5173',
       'http://localhost:3000',
-      'http://127.0.0.1:5173',
-      'http://127.0.0.1:3000',
       process.env.LOCAL_URL || 'http://localhost:5173'
     ];
   }
@@ -93,6 +95,7 @@ app.use("/api/2fa", twofaRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/status", statusRoutes);
 app.use("/api/support", supportRoutes);
+app.use("/api/ai", aiRoutes);
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {

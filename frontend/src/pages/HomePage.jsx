@@ -1,5 +1,6 @@
 import { useChatStore } from "../store/useChatStore";
 import { useGroupStore } from "../store/useGroupStore";
+import { useAIStore } from "../store/useAIStore";
 
 import Sidebar from "../components/Sidebar";
 import NoChatSelected from "../components/NoChatSelected";
@@ -8,6 +9,7 @@ import ChatContainer from "../components/ChatContainer";
 const HomePage = () => {
   const { selectedUser } = useChatStore();
   const { selectedGroup } = useGroupStore();
+  const { isSelected: isAISelected } = useAIStore();
 
   return (
     <div className="h-screen bg-base-200">
@@ -16,7 +18,7 @@ const HomePage = () => {
           <div className="flex h-full rounded-lg overflow-hidden resize-none">
             <Sidebar />
 
-            {!selectedUser && !selectedGroup ? <NoChatSelected /> : <ChatContainer />}
+            {!selectedUser && !selectedGroup && !isAISelected ? <NoChatSelected /> : <ChatContainer />}
           </div>
         </div>
       </div>

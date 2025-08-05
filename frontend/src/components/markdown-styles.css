@@ -1,0 +1,116 @@
+/* Markdown content styling */
+.chat-bubble h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.chat-bubble h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.chat-bubble h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.chat-bubble p {
+  margin-bottom: 0.75rem;
+}
+
+.chat-bubble ul, .chat-bubble ol {
+  margin-top: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding-left: 1.5rem;
+}
+
+.chat-bubble ul {
+  list-style-type: disc;
+}
+
+.chat-bubble ol {
+  list-style-type: decimal;
+}
+
+.chat-bubble li {
+  margin-bottom: 0.25rem;
+}
+
+.chat-bubble pre {
+  background-color: rgba(0, 0, 0, 0.1);
+  border-radius: 0.25rem;
+  padding: 0.75rem;
+  margin: 0.75rem 0;
+  overflow-x: auto;
+}
+
+.chat-bubble code {
+  font-family: monospace;
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  background-color: rgba(0, 0, 0, 0.1);
+  font-size: 0.875rem;
+}
+
+.chat-bubble pre code {
+  padding: 0;
+  background-color: transparent;
+}
+
+.chat-bubble a {
+  color: #0284c7;
+  text-decoration: underline;
+}
+
+.chat-bubble blockquote {
+  border-left: 4px solid rgba(0, 0, 0, 0.2);
+  padding-left: 1rem;
+  margin-left: 0;
+  margin-right: 0;
+  font-style: italic;
+}
+
+.chat-bubble table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.chat-bubble th, .chat-bubble td {
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  padding: 0.5rem;
+}
+
+.chat-bubble th {
+  background-color: rgba(0, 0, 0, 0.05);
+  font-weight: 600;
+}
+
+/* Dark mode adjustments */
+.dark .chat-bubble pre,
+.dark .chat-bubble code {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark .chat-bubble a {
+  color: #38bdf8;
+}
+
+.dark .chat-bubble blockquote {
+  border-left-color: rgba(255, 255, 255, 0.2);
+}
+
+.dark .chat-bubble th, 
+.dark .chat-bubble td {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.dark .chat-bubble th {
+  background-color: rgba(255, 255, 255, 0.05);
+}

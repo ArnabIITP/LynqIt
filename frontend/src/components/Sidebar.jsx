@@ -1,17 +1,18 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useChatStore } from "../store/useChatStore";
 import { useGroupStore } from "../store/useGroupStore";
 import { useStatusStore } from "../store/useStatusStore";
 import { useAuthStore } from "../store/useAuthStore";
+import { useAIStore } from "../store/useAIStore";
 import SidebarSkeleton from "./skeletons/SidebarSkeleton";
 import GroupCreateModal from "./GroupCreateModal";
 import StatusCreateModal from "./StatusCreateModal";
 import StatusViewer from "./StatusViewer";
 import PinButton from "./PinButton";
-import { Search, Plus, MessageCircle, Circle, Camera } from "lucide-react";
+import { Search, Plus, MessageCircle, Circle, Camera, Lightbulb, Trash2, X } from "lucide-react";
 
-const Sidebar = () => {
+const Sidebar = ({ isOpen, setIsOpen, activeTab: propActiveTab }) => {
   const {
     getUsers,
     getAllUsers,
@@ -22,6 +23,8 @@ const Sidebar = () => {
     isUsersLoading,
     unreadCounts
   } = useChatStore();
+  
+  const navigate = useNavigate();
 
   const {
     groups,
@@ -49,11 +52,18 @@ const Sidebar = () => {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  const [activeTab, setActiveTab] = useState("chats"); // "chats", "status", or "groups"
+  const [activeTab, setActiveTab] = useState(propActiveTab || "chats"); // "chats", "status", "groups", or "assistant"
   const [showGroupCreateModal, setShowGroupCreateModal] = useState(false);
   const [showStatusCreateModal, setShowStatusCreateModal] = useState(false);
   const [showStatusViewer, setShowStatusViewer] = useState(false);
   const [statusViewerData, setStatusViewerData] = useState({ contactIndex: 0, statusIndex: 0 });
+  
+  // Update active tab when prop changes
+  useEffect(() => {
+    if (propActiveTab) {
+      setActiveTab(propActiveTab);
+    }
+  }, [propActiveTab]);
 
   useEffect(() => {
     getUsers(); // Get users with existing conversations
@@ -133,8 +143,32 @@ const Sidebar = () => {
       )
     : groups;
 
+  // Import AI store functions
+  const { 
+    selectAI, 
+    deselectAI, 
+    conversationHistory,
+    selectedHistoryId,
+    selectConversation,
+    startNewConversation,
+    deleteConversation,
+    searchConversations
+  } = useAIStore();
+
   // Handle tab switching
   const handleTabSwitch = (tab) => {
+    if (tab === "assistant") {
+      // Select AI Assistant in the main chat view instead of navigating
+      setActiveTab(tab);
+      setSelectedUser(null);
+      setSelectedGroup(null);
+      selectAI(); // Select the AI in the store
+      setSearchQuery("");
+      return;
+    }
+    
+    // For other tabs, deselect AI
+    deselectAI();
     setActiveTab(tab);
     setSelectedUser(null);
     setSelectedGroup(null);
@@ -143,12 +177,14 @@ const Sidebar = () => {
 
   // Handle group selection
   const handleGroupSelect = async (group) => {
+    deselectAI(); // Deselect AI when selecting a group
     await setSelectedGroup(group);
     setSelectedUser(null);
   };
 
   // Handle user selection
   const handleUserSelect = (user) => {
+    deselectAI(); // Deselect AI when selecting a user
     setSelectedUser(user);
     setSelectedGroup(null);
   };
@@ -242,7 +278,7 @@ const Sidebar = () => {
 
   return (
     <>
-      <aside className="h-full w-20 lg:w-80 min-w-20 lg:min-w-80 max-w-20 lg:max-w-80 border-r border-base-300/50 flex flex-shrink-0 bg-gradient-to-b from-base-100 to-base-200/30">
+      <aside className="h-full w-20 lg:w-80 min-w-20 lg:min-w-80 max-w-20 lg:max-w-80 border-r border-base-300/50 flex flex-shrink-0 bg-gradient-to-b from-base-100 to-base-200/30 z-20 relative overflow-hidden">
         {/* WhatsApp-style vertical tabs */}
         <div className="w-20 bg-gradient-to-b from-base-200/80 to-base-300/50 border-r border-base-300/30 flex flex-col items-center py-4 gap-4">
           {/* Profile Picture */}
@@ -263,7 +299,7 @@ const Sidebar = () => {
               onClick={() => handleTabSwitch("chats")}
               className={`relative p-3 rounded-xl transition-all duration-200 ${
                 activeTab === "chats"
-                  ? "bg-primary text-primary-content shadow-lg"
+                  ? "bg-primary text-primary-content"
                   : "bg-base-100 text-base-content hover:bg-base-300"
               }`}
               title="Chats"
@@ -281,7 +317,7 @@ const Sidebar = () => {
               onClick={() => handleTabSwitch("status")}
               className={`relative p-3 rounded-xl transition-all duration-200 ${
                 activeTab === "status"
-                  ? "bg-primary text-primary-content shadow-lg"
+                  ? "bg-primary text-primary-content"
                   : "bg-base-100 text-base-content hover:bg-base-300"
               }`}
               title="Status"
@@ -300,7 +336,7 @@ const Sidebar = () => {
               onClick={() => handleTabSwitch("groups")}
               className={`relative p-3 rounded-xl transition-all duration-200 ${
                 activeTab === "groups"
-                  ? "bg-primary text-primary-content shadow-lg"
+                  ? "bg-primary text-primary-content"
                   : "bg-base-100 text-base-content hover:bg-base-300"
               }`}
               title="Groups"
@@ -311,6 +347,19 @@ const Sidebar = () => {
                   {(unreadCounts.totalGroups + unreadCounts.totalMentions) > 9 ? '9+' : (unreadCounts.totalGroups + unreadCounts.totalMentions)}
                 </div>
               )}
+            </button>
+            
+            {/* LynqIt AI Tab */}
+            <button
+              onClick={() => handleTabSwitch("assistant")}
+              className={`relative p-3 rounded-xl transition-all duration-200 ${
+                activeTab === "assistant"
+                  ? "bg-primary text-primary-content"
+                  : "bg-base-100 text-base-content hover:bg-base-300"
+              }`}
+              title="LynqIt AI"
+            >
+              <Lightbulb size={20} />
             </button>
           </div>
 
@@ -340,12 +389,13 @@ const Sidebar = () => {
         {/* Content Area - Hidden on mobile, shown on lg+ */}
         <div className="hidden lg:flex flex-1 flex-col">
           {/* Header with Search */}
-          <div className="border-b border-base-300 p-4">
+          <div className="border-b border-base-300 p-4 px-3">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">
                 {activeTab === "chats" && "Chats"}
                 {activeTab === "status" && "Status"}
                 {activeTab === "groups" && "Groups"}
+                {activeTab === "assistant" && "LynqIt AI"}
               </h2>
 
               {activeTab === "groups" && (
@@ -360,13 +410,14 @@ const Sidebar = () => {
             </div>
 
             {/* Search Bar */}
-            <div className="flex items-center gap-2 bg-base-200/80 px-3 py-2.5 rounded-xl border border-base-300/30 backdrop-blur-sm hover:bg-base-200 transition-colors">
+            <div className="flex items-center gap-2 bg-base-200/80 px-3 py-2.5 rounded-xl border border-base-300/30 backdrop-blur-sm hover:bg-base-200 transition-colors mx-1">
               <Search className="w-4 h-4 text-primary/70" />
               <input
                 type="text"
                 placeholder={
                   activeTab === "chats" ? "Search chats..." :
                   activeTab === "status" ? "Search status..." :
+                  activeTab === "assistant" ? "Search conversations..." :
                   "Search groups..."
                 }
                 value={searchQuery}
@@ -514,7 +565,7 @@ const Sidebar = () => {
                   )}
                 </div>
               </>
-            ) : (
+            ) : activeTab === "groups" ? (
               // Display groups
             <>
               {displayGroups.map((group) => {
@@ -610,6 +661,75 @@ const Sidebar = () => {
                 </div>
               )}
             </>
+            ) : (
+              // Display AI Assistant tab (assistant tab case)
+              <>
+                <div className="px-4 pt-4 mb-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-base-content/80">AI Conversations</h3>
+                  </div>
+                  <button
+                    onClick={startNewConversation}
+                    className="w-full btn btn-sm btn-primary flex items-center justify-center"
+                  >
+                    New Chat
+                  </button>
+                </div>
+                
+                {/* AI conversation history */}
+                <div className="flex-1 overflow-y-auto px-2 pb-2">
+                  {searchConversations(searchQuery).length > 0 ? (
+                    searchConversations(searchQuery).map((conversation) => (
+                      <button
+                        key={conversation.id}
+                        onClick={() => {
+                          // Only select the conversation, don't trigger a new message generation
+                          selectConversation(conversation.id);
+                        }}
+                        className={`w-full py-2 px-3 flex items-center gap-2 hover:bg-base-300/60 transition-all duration-200 rounded-lg mb-1.5 mx-2 text-left
+                          ${selectedHistoryId === conversation.id ? "bg-primary/10 border border-primary/20 shadow-sm" : "hover:shadow-sm"}`}
+                      >
+                        <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                          <Lightbulb size={16} className="text-blue-500" />
+                        </div>
+                        
+                        <div className="text-left min-w-0 flex-1 max-w-[150px]">
+                          <div className="font-medium truncate text-sm">{conversation.title}</div>
+                          <div className="text-xs text-base-content/60 truncate">{conversation.lastMessage}</div>
+                        </div>
+                        
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm("Delete this conversation?")) {
+                              deleteConversation(conversation.id);
+                            }
+                          }} 
+                          className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-base-300 text-base-content/60 hover:text-error transition-colors" 
+                          title="Delete conversation"
+                          aria-label="Delete conversation"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6"></path>
+                          </svg>
+                        </button>
+                      </button>
+                    ))
+                  ) : searchQuery ? (
+                    <div className="text-center py-8 text-base-content/60">
+                      <Search size={32} className="mx-auto mb-2 opacity-50" />
+                      <p>No conversations found</p>
+                      <p className="text-xs mt-1">Try a different search term</p>
+                    </div>
+                  ) : (
+                    <div className="text-center text-zinc-500 py-8">
+                      <Lightbulb size={48} className="mx-auto mb-3 opacity-50" />
+                      <p className="mb-2">No conversations yet</p>
+                      <p className="text-sm">Click "New Chat" to start talking with LynqIt AI</p>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
         </div>

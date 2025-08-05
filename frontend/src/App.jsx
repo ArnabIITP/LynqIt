@@ -21,6 +21,7 @@ import { useChatStore } from "./store/useChatStore";
 import { useGroupStore } from "./store/useGroupStore";
 import { useEffect, useState } from "react";
 import { GoogleOAuthProvider } from "@react-oauth/google";
+import { HelmetProvider } from 'react-helmet-async';
 import { initializeEncryption } from "./utils/encryption";
 import { getGoogleClientId } from "./config/environment";
 
@@ -164,10 +165,11 @@ const App = () => {
 
   return (
     <GoogleOAuthProvider clientId={getGoogleClientId()}>
-      <div data-theme={theme}>
-        <Navbar />
+      <HelmetProvider>
+        <div data-theme={theme}>
+          <Navbar />
 
-        <Routes>
+          <Routes>
           <Route path="/" element={authUser ? <HomePage /> : <Navigate to="/login" />} />
           <Route path="/signup" element={!authUser ? <SignUpPage /> : <Navigate to="/" />} />
           <Route path="/login" element={!authUser ? <LoginPage /> : <Navigate to="/" />} />
@@ -178,6 +180,7 @@ const App = () => {
           <Route path="/security" element={authUser ? <SecuritySettings /> : <Navigate to="/login" />} />
           <Route path="/profile" element={authUser ? <ProfilePage /> : <Navigate to="/login" />} />
           <Route path="/report-thanks" element={authUser ? <ReportThanksPage /> : <Navigate to="/login" />} />
+          <Route path="/assistant" element={<Navigate to="/" replace />} />
           <Route path="/join-group/:groupId" element={
             <ErrorBoundary>
               <JoinGroupPage />
@@ -187,6 +190,7 @@ const App = () => {
 
         <Toaster />
       </div>
+      </HelmetProvider>
     </GoogleOAuthProvider>
   );
 };

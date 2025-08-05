@@ -1,20 +1,31 @@
 import multer from "multer";
 import path from "path";
+import fs from "fs";
+
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log('Created uploads directory from middleware:', uploadsDir);
+}
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'uploads/'); // Make sure this directory exists
+    // Use absolute path to uploads directory
+    cb(null, uploadsDir);
   },
   filename: function (req, file, cb) {
     // Generate unique filename
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    const fileName = file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname);
+    console.log(`Multer generated filename: ${fileName}`);
+    cb(null, fileName);
   }
 });
 
 // File filter for images
-const fileFilter = (req, file, cb) => {
+const imageFileFilter = (req, file, cb) => {
   // Check if file is an image
   if (file.mimetype.startsWith('image/')) {
     cb(null, true);
@@ -23,13 +34,22 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Configure multer
+// Configure multer for general uploads (images only)
 export const upload = multer({
   storage: storage,
+  fileFilter: imageFileFilter,
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB limit
-  },
-  fileFilter: fileFilter
+  }
+});
+
+// Configure multer for AI assistant uploads (images only)
+export const uploadAI = multer({
+  storage: storage,
+  fileFilter: imageFileFilter, // Only accept images for AI assistant too
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  }
 });
 
 // Memory storage for direct Cloudinary upload (alternative)
@@ -40,5 +60,5 @@ export const uploadMemory = multer({
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB limit
   },
-  fileFilter: fileFilter
+  fileFilter: imageFileFilter
 });
