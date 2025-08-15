@@ -7,6 +7,7 @@ import ChatReadState from "../models/chatReadState.model.js";
 import cloudinary from "../lib/cloudinary.js";
 import { getReceiverSocketId, io } from "../lib/socket.js";
 import { incrementUnreadCount, getUnreadCountsForUser } from "./unreadCounter.controller.js";
+import mongoose from "mongoose";
 
 export const getUsersForSidebar = async (req, res) => {
   try {
@@ -17,7 +18,7 @@ export const getUsersForSidebar = async (req, res) => {
 
     // Find all unique users who have had a conversation with the logged-in user
     // and where not all messages are deleted by the current user
-    const messages = await Message.find({
+    let messages = await Message.find({
       $or: [
         { senderId: loggedInUserId },
         { receiverId: loggedInUserId }
@@ -31,6 +32,24 @@ export const getUsersForSidebar = async (req, res) => {
         }
       ]
     });
+
+    // Respect per-user clearedAt: filter out messages older than clearedAt for each chat
+    try {
+      const states = await ChatReadState.find({ userId: loggedInUserId });
+      const clearedMap = new Map(states.map(s => [s.chatId, s.clearedAt]));
+      messages = messages.filter(msg => {
+        const otherId = msg.senderId?.toString() === loggedInUserId.toString()
+          ? msg.receiverId?.toString()
+          : msg.senderId?.toString();
+        if (!otherId) return false;
+        const chatId = ChatReadState.generateChatId('direct', loggedInUserId, otherId);
+        const clearedAt = clearedMap.get(chatId);
+        if (!clearedAt) return true;
+        return new Date(msg.createdAt) > new Date(clearedAt);
+      });
+    } catch (e) {
+      console.warn('Could not apply clearedAt filter for sidebar:', e?.message);
+    }
 
     // Extract unique user IDs from messages
     const userIds = new Set();
@@ -108,13 +127,16 @@ export const getMessages = async (req, res) => {
     const { id: userToChatId } = req.params;
     const myId = req.user._id;
 
-    // Find messages between the two users
-    const messages = await Message.find({
+    // Pagination params
+    const limit = parseInt(req.query.limit) || 50;
+    const before = req.query.before ? new Date(req.query.before) : null;
+
+    // Build query
+    const query = {
       $or: [
         { senderId: myId, receiverId: userToChatId },
         { senderId: userToChatId, receiverId: myId },
       ],
-      // Don't fetch messages that this user deleted for themselves
       $nor: [
         {
           isDeleted: true,
@@ -122,19 +144,33 @@ export const getMessages = async (req, res) => {
           deletedBy: myId
         }
       ]
-    }).populate({
-      path: 'replyTo',
-      populate: {
-        path: 'senderId',
-        select: 'fullName username profilePic'
-      }
-    }).populate('statusReply.statusId')
-      .sort({ createdAt: 1 }); // Sort by creation time in ascending order
+    };
+    // Respect per-user clear chat (clearedAt) if present
+    const chatId = ChatReadState.generateChatId('direct', myId, userToChatId);
+    const readState = await ChatReadState.findOne({ userId: myId, chatId });
+    if (readState?.clearedAt) {
+      query.createdAt = { ...(query.createdAt || {}), $gt: readState.clearedAt };
+    }
+    if (before) {
+      query.createdAt = { $lt: before };
+    }
+
+    // Find messages, newest first
+    const messages = await Message.find(query)
+      .populate({
+        path: 'replyTo',
+        populate: {
+          path: 'senderId',
+          select: 'fullName username profilePic'
+        }
+      })
+      .populate('statusReply.statusId')
+      .sort({ createdAt: -1 })
+      .limit(limit);
 
     // Add status reply information to messages
     const messagesWithStatusInfo = messages.map(message => {
       const messageObj = message.toObject();
-
       if (messageObj.statusReply && messageObj.statusReply.statusId) {
         messageObj.isStatusReply = true;
         messageObj.statusInfo = {
@@ -145,11 +181,11 @@ export const getMessages = async (req, res) => {
           fontFamily: messageObj.statusReply.fontFamily
         };
       }
-
       return messageObj;
     });
 
-    res.status(200).json(messagesWithStatusInfo);
+    // Return in chronological order
+    res.status(200).json(messagesWithStatusInfo.reverse());
   } catch (error) {
     console.log("Error in getMessages controller: ", error.message);
     res.status(500).json({ error: "Internal server error" });
@@ -158,7 +194,7 @@ export const getMessages = async (req, res) => {
 
 export const sendMessage = async (req, res) => {
   try {
-    const { text, image, mediaType } = req.body;
+    const { text, image, mediaType, fileName, fileSize, caption, type, lat, lng, address } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
 
@@ -199,11 +235,17 @@ export const sendMessage = async (req, res) => {
 
     const isFirstMessage = existingMessages.length === 0;
 
-    let imageUrl;
+
+    let imageUrl = null;
     if (image) {
-      // Upload base64 image to cloudinary
-      const uploadResponse = await cloudinary.uploader.upload(image);
-      imageUrl = uploadResponse.secure_url;
+      if (typeof image === 'string' && image.startsWith('http')) {
+        // Already a Cloudinary URL (document, video, audio, etc.)
+        imageUrl = image;
+      } else {
+        // Assume base64 image, upload to Cloudinary
+        const uploadResponse = await cloudinary.uploader.upload(image);
+        imageUrl = uploadResponse.secure_url;
+      }
     }
 
     const newMessage = new Message({
@@ -212,6 +254,13 @@ export const sendMessage = async (req, res) => {
       text,
       image: imageUrl,
       mediaType,
+      fileName,
+      fileSize,
+      caption,
+      type,
+      lat,
+      lng,
+      address,
     });
 
     await newMessage.save();
@@ -531,7 +580,7 @@ export const updateLastSeen = async (req, res) => {
 export const replyToMessage = async (req, res) => {
   try {
     const { messageId } = req.params;
-    const { text, image, mediaType, groupId, receiverId } = req.body;
+    const { text, image, mediaType, fileName, fileSize, caption, groupId, receiverId } = req.body;
     const senderId = req.user._id;
 
     console.log("💬 Reply to message request:", {
@@ -540,7 +589,9 @@ export const replyToMessage = async (req, res) => {
       receiverId,
       groupId,
       text: text?.substring(0, 50) + "...",
-      hasImage: !!image
+      hasImage: !!image,
+      mediaType,
+      hasCaption: !!caption
     });
 
     // Find the original message
@@ -552,10 +603,14 @@ export const replyToMessage = async (req, res) => {
 
     console.log("✅ Found original message:", originalMessage._id);
 
-    let imageUrl;
+    let imageUrl = null;
     if (image) {
-      const uploadResponse = await cloudinary.uploader.upload(image);
-      imageUrl = uploadResponse.secure_url;
+      if (typeof image === 'string' && image.startsWith('http')) {
+        imageUrl = image;
+      } else {
+        const uploadResponse = await cloudinary.uploader.upload(image);
+        imageUrl = uploadResponse.secure_url;
+      }
     }
 
     // Create reply message
@@ -566,6 +621,9 @@ export const replyToMessage = async (req, res) => {
       text,
       image: imageUrl,
       mediaType,
+      fileName,
+      fileSize,
+      caption,
       messageType: groupId ? 'group' : 'direct',
       replyTo: messageId,
       isReply: true
@@ -855,11 +913,14 @@ export const getGroupMessages = async (req, res) => {
       return res.status(403).json({ error: "You are not a member of this group" });
     }
 
-    // Get group messages
-    const messages = await Message.find({
+    // Pagination params
+    const limit = parseInt(req.query.limit) || 20;
+    const before = req.query.before ? new Date(req.query.before) : null;
+
+    // Build query
+    const query = {
       groupId: groupId,
       messageType: 'group',
-      // Don't fetch messages that this user deleted for themselves
       $nor: [
         {
           isDeleted: true,
@@ -867,7 +928,20 @@ export const getGroupMessages = async (req, res) => {
           deletedBy: userId
         }
       ]
-    }).populate('senderId', 'fullName username profilePic')
+    };
+    // Respect per-user clear chat (clearedAt) if present
+    const chatId = ChatReadState.generateChatId('group', userId, groupId);
+    const readState = await ChatReadState.findOne({ userId, chatId });
+    if (readState?.clearedAt) {
+      query.createdAt = { ...(query.createdAt || {}), $gt: readState.clearedAt };
+    }
+    if (before) {
+      query.createdAt = { $lt: before };
+    }
+
+    // Find messages, newest first
+    const messages = await Message.find(query)
+      .populate('senderId', 'fullName username profilePic')
       .populate('mentions.user', 'fullName username')
       .populate({
         path: 'replyTo',
@@ -876,9 +950,11 @@ export const getGroupMessages = async (req, res) => {
           select: 'fullName username profilePic'
         }
       })
-      .sort({ createdAt: 1 });
+      .sort({ createdAt: -1 })
+      .limit(limit);
 
-    res.status(200).json(messages);
+    // Return in chronological order
+    res.status(200).json(messages.reverse());
   } catch (error) {
     console.log("Error in getGroupMessages controller: ", error.message);
     res.status(500).json({ error: "Internal server error" });
@@ -1187,7 +1263,7 @@ export const getGroupMessageInfo = async (req, res) => {
 
 export const sendGroupMessage = async (req, res) => {
   try {
-    const { text, image, mediaType } = req.body;
+    const { text, image, mediaType, fileName, fileSize, caption } = req.body;
     const { groupId } = req.params;
     const senderId = req.user._id;
 
@@ -1201,11 +1277,15 @@ export const sendGroupMessage = async (req, res) => {
       return res.status(403).json({ error: "You are not a member of this group" });
     }
 
-    let imageUrl;
+    let imageUrl = null;
     if (image) {
-      // Upload base64 image to cloudinary
-      const uploadResponse = await cloudinary.uploader.upload(image);
-      imageUrl = uploadResponse.secure_url;
+      if (typeof image === 'string' && image.startsWith('http')) {
+        imageUrl = image;
+      } else {
+        // Assume base64 image, upload to Cloudinary
+        const uploadResponse = await cloudinary.uploader.upload(image);
+        imageUrl = uploadResponse.secure_url;
+      }
     }
 
     // Parse mentions from text using the new structured approach
@@ -1228,6 +1308,9 @@ export const sendGroupMessage = async (req, res) => {
       text,
       image: imageUrl,
       mediaType,
+      fileName,
+      fileSize,
+      caption,
       mentions,
       groupReadReceipts
     });
@@ -1376,5 +1459,100 @@ export const forwardMessage = async (req, res) => {
   } catch (error) {
     console.error("Error forwarding message:", error);
     res.status(500).json({ error: "Failed to forward message" });
+  }
+};
+
+// Clear chat for current user (delete for me). For direct chats, if both users cleared,
+// permanently delete conversation and Cloudinary assets.
+export const clearChat = async (req, res) => {
+  try {
+    const { chatType, targetId } = req.body; // 'direct' | 'group'
+    const userId = req.user._id;
+
+    if (!['direct', 'group'].includes(chatType) || !targetId) {
+      return res.status(400).json({ error: 'Invalid parameters' });
+    }
+
+    const chatId = ChatReadState.generateChatId(chatType, userId, targetId);
+    const now = new Date();
+
+    // Upsert clearedAt for this user/chat
+    const readState = await ChatReadState.findOneAndUpdate(
+      { userId, chatId },
+      {
+        userId,
+        chatId,
+        chatType,
+        targetId,
+        clearedAt: now,
+        lastActiveAt: now
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    let permanentDeletion = false;
+    let deletedCount = 0;
+
+    if (chatType === 'direct') {
+      // Check if the other user has cleared as well and both cover the latest message
+      const otherUserId = targetId;
+      const otherChatId = ChatReadState.generateChatId('direct', otherUserId, userId);
+      const otherState = await ChatReadState.findOne({ userId: otherUserId, chatId: otherChatId });
+
+      // Find latest message timestamp in this conversation
+      const latestMessage = await Message.findOne({
+        $or: [
+          { senderId: userId, receiverId: otherUserId },
+          { senderId: otherUserId, receiverId: userId }
+        ]
+      }).sort({ createdAt: -1 });
+
+      if (latestMessage && otherState?.clearedAt) {
+        const coversAll = new Date(readState.clearedAt) >= new Date(latestMessage.createdAt)
+          && new Date(otherState.clearedAt) >= new Date(latestMessage.createdAt);
+
+        if (coversAll) {
+          // Permanently delete conversation and Cloudinary assets
+          const convoMessages = await Message.find({
+            $or: [
+              { senderId: userId, receiverId: otherUserId },
+              { senderId: otherUserId, receiverId: userId }
+            ]
+          });
+
+          for (const msg of convoMessages) {
+            if (msg.image) {
+              try {
+                const publicId = extractCloudinaryPublicId(msg.image);
+                if (publicId) {
+                  await cloudinary.uploader.destroy(publicId);
+                }
+              } catch (err) {
+                console.error('Error deleting Cloudinary asset:', err?.message);
+              }
+            }
+          }
+
+          const result = await Message.deleteMany({
+            $or: [
+              { senderId: userId, receiverId: otherUserId },
+              { senderId: otherUserId, receiverId: userId }
+            ]
+          });
+          deletedCount = result.deletedCount || 0;
+          permanentDeletion = true;
+        }
+      }
+    }
+
+    res.status(200).json({
+      message: 'Chat cleared for you',
+      chatId,
+      permanentDeletion,
+      deletedCount
+    });
+  } catch (error) {
+    console.error('Error clearing chat:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 };

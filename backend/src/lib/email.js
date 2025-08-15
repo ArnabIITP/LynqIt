@@ -163,56 +163,42 @@ export const sendWelcomeEmail = async (to, name) => {
             to,
             subject: '🎉 Welcome to LynqIt! Your Journey Begins Now',
             html: `
-                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-                    <!-- Header with gradient background -->
-                    <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 30px 20px; text-align: center;">
-                        <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 700;">Welcome to LynqIt!</h1>
-                        <p style="color: rgba(255,255,255,0.9); font-size: 18px; margin-top: 10px;">Your new communication hub</p>
+                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.08); background: #F0F2F5;">
+                    <!-- Header with brand colors -->
+                    <div style="background: #333333; padding: 30px 20px; text-align: center;">
+                        <h1 style="color: #FFA500; margin: 0; font-size: 28px; font-weight: 700; letter-spacing: 1px;">Welcome to <span style='color:#fff;'>Lynq</span><span style='color:#FFA500;'>It</span>!</h1>
+                        <p style="color: #fff; font-size: 18px; margin-top: 10px;">Your new communication hub</p>
                     </div>
 
                     <!-- Personalized greeting -->
-                    <div style="background-color: white; padding: 30px 25px;">
-                        <h2 style="color: #4F46E5; font-size: 22px; margin-top: 0;">Hey ${name}! 👋</h2>
-                        <p style="color: #4B5563; font-size: 16px; line-height: 1.6; margin-bottom: 25px;">
+                    <div style="background-color: #fff; padding: 30px 25px;">
+                        <h2 style="color: #333333; font-size: 22px; margin-top: 0;">Hey ${name}! 👋</h2>
+                        <p style="color: #54656F; font-size: 16px; line-height: 1.6; margin-bottom: 25px;">
                             We're thrilled to have you join our community! Your account has been successfully created and verified.
                         </p>
 
                         <!-- Features section -->
-                        <div style="background-color: #F9FAFB; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
-                            <h3 style="color: #4F46E5; font-size: 18px; margin-top: 0;">Here's what you can do with LynqIt:</h3>
+                        <div style="background-color: #F0F2F5; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
+                            <h3 style="color: #333333; font-size: 18px; margin-top: 0;">Here's what you can do with LynqIt:</h3>
 
-                            <div style="display: block; margin: 15px 0;">
-                                <div style="display: inline-block; vertical-align: top; width: 30px;">
-                                    <span style="background-color: #4F46E5; color: white; border-radius: 50%; width: 24px; height: 24px; display: inline-block; text-align: center; line-height: 24px; font-weight: bold;">✓</span>
-                                </div>
-                                <div style="display: inline-block; width: calc(100% - 35px);">
-                                    <p style="margin: 0; color: #4B5563; font-size: 16px;"><strong>Connect</strong> with friends and colleagues instantly</p>
-                                </div>
+                            <div style="display: flex; align-items: center; margin: 15px 0;">
+                                <span style="background-color: #FFA500; color: #fff; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 10px;">✓</span>
+                                <span style="color: #54656F; font-size: 16px;"><strong>Connect</strong> with friends and colleagues instantly</span>
                             </div>
-
-                            <div style="display: block; margin: 15px 0;">
-                                <div style="display: inline-block; vertical-align: top; width: 30px;">
-                                    <span style="background-color: #4F46E5; color: white; border-radius: 50%; width: 24px; height: 24px; display: inline-block; text-align: center; line-height: 24px; font-weight: bold;">✓</span>
-                                </div>
-                                <div style="display: inline-block; width: calc(100% - 35px);">
-                                    <p style="margin: 0; color: #4B5563; font-size: 16px;"><strong>Share</strong> photos, videos, and documents seamlessly</p>
-                                </div>
+                            <div style="display: flex; align-items: center; margin: 15px 0;">
+                                <span style="background-color: #FFA500; color: #fff; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 10px;">✓</span>
+                                <span style="color: #54656F; font-size: 16px;"><strong>Share</strong> photos, videos, and documents seamlessly</span>
                             </div>
-
-                            <div style="display: block; margin: 15px 0;">
-                                <div style="display: inline-block; vertical-align: top; width: 30px;">
-                                    <span style="background-color: #4F46E5; color: white; border-radius: 50%; width: 24px; height: 24px; display: inline-block; text-align: center; line-height: 24px; font-weight: bold;">✓</span>
-                                </div>
-                                <div style="display: inline-block; width: calc(100% - 35px);">
-                                    <p style="margin: 0; color: #4B5563; font-size: 16px;"><strong>Enjoy</strong> real-time messaging with read receipts</p>
-                                </div>
+                            <div style="display: flex; align-items: center; margin: 15px 0;">
+                                <span style="background-color: #FFA500; color: #fff; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 10px;">✓</span>
+                                <span style="color: #54656F; font-size: 16px;"><strong>Enjoy</strong> real-time messaging with read receipts</span>
                             </div>
                         </div>
 
                         <!-- Getting started tips -->
                         <div style="margin-bottom: 30px;">
-                            <h3 style="color: #4F46E5; font-size: 18px;">Quick tips to get started:</h3>
-                            <ol style="color: #4B5563; font-size: 16px; line-height: 1.6; padding-left: 20px;">
+                            <h3 style="color: #333333; font-size: 18px;">Quick tips to get started:</h3>
+                            <ol style="color: #54656F; font-size: 16px; line-height: 1.6; padding-left: 20px;">
                                 <li>Complete your profile with a photo and bio</li>
                                 <li>Find friends using their email or username</li>
                                 <li>Start your first conversation today!</li>
@@ -221,29 +207,29 @@ export const sendWelcomeEmail = async (to, name) => {
 
                         <!-- CTA Button -->
                         <div style="text-align: center; margin: 30px 0;">
-                            <a href="${FRONTEND_URL}" style="display: inline-block; background: linear-gradient(to right, #4F46E5, #7C3AED); color: white; text-decoration: none; padding: 14px 30px; border-radius: 50px; font-weight: bold; font-size: 16px; transition: all 0.3s; box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3);">Start Chatting Now →</a>
+                            <a href="${FRONTEND_URL}" style="display: inline-block; background: #FFA500; color: #fff; text-decoration: none; padding: 14px 30px; border-radius: 50px; font-weight: bold; font-size: 16px; transition: all 0.3s; box-shadow: 0 4px 10px rgba(51,51,51,0.08); letter-spacing: 0.5px;">Start Chatting Now →</a>
                         </div>
 
                         <!-- Social proof -->
-                        <div style="background-color: #F9FAFB; border-radius: 8px; padding: 15px; margin-top: 20px; text-align: center;">
-                            <p style="color: #6B7280; font-size: 15px; font-style: italic; margin: 0;">
+                        <div style="background-color: #F0F2F5; border-radius: 8px; padding: 15px; margin-top: 20px; text-align: center;">
+                            <p style="color: #8696A0; font-size: 15px; font-style: italic; margin: 0;">
                                 "LynqIt has transformed how our team communicates. It's simple, fast, and reliable!"
                             </p>
-                            <p style="color: #4B5563; font-size: 14px; font-weight: bold; margin-top: 10px; margin-bottom: 0;">
+                            <p style="color: #333333; font-size: 14px; font-weight: bold; margin-top: 10px; margin-bottom: 0;">
                                 - The LynqIt Team
                             </p>
                         </div>
                     </div>
 
                     <!-- Footer -->
-                    <div style="background-color: #F3F4F6; padding: 20px; text-align: center;">
-                        <p style="color: #6B7280; font-size: 14px; margin: 0 0 10px 0;">
+                    <div style="background-color: #EDEDED; padding: 20px; text-align: center;">
+                        <p style="color: #8696A0; font-size: 14px; margin: 0 0 10px 0;">
                             Need help? Reply to this email or contact our support team.
                         </p>
                         <div style="margin-bottom: 15px;">
-                            <a href="#" style="display: inline-block; margin: 0 10px; color: #4F46E5; text-decoration: none; font-size: 14px;">Help Center</a>
-                            <a href="#" style="display: inline-block; margin: 0 10px; color: #4F46E5; text-decoration: none; font-size: 14px;">Privacy Policy</a>
-                            <a href="#" style="display: inline-block; margin: 0 10px; color: #4F46E5; text-decoration: none; font-size: 14px;">Terms of Service</a>
+                            <a href="#" style="display: inline-block; margin: 0 10px; color: #333333; text-decoration: none; font-size: 14px;">Help Center</a>
+                            <a href="#" style="display: inline-block; margin: 0 10px; color: #333333; text-decoration: none; font-size: 14px;">Privacy Policy</a>
+                            <a href="#" style="display: inline-block; margin: 0 10px; color: #333333; text-decoration: none; font-size: 14px;">Terms of Service</a>
                         </div>
                         <p style="color: #9CA3AF; font-size: 12px; margin: 0;">
                             © ${new Date().getFullYear()} LynqIt. All rights reserved.

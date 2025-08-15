@@ -154,6 +154,73 @@ export const createImageStatus = async (req, res) => {
   }
 };
 
+// Create video status
+export const createVideoStatus = async (req, res) => {
+  try {
+  const { caption, visibility, specificUsers, duration, trimStart, trimEnd } = req.body;
+
+    if (!req.file) {
+      return res.status(400).json({ error: "Video is required for video status" });
+    }
+
+    // Upload video to Cloudinary using buffer
+    const uploadResponse = await cloudinary.uploader.upload(
+      `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`,
+      {
+        folder: "lynqit_status",
+        resource_type: "video",
+        transformation: [
+          { quality: "auto:good" }
+        ]
+      }
+    );
+
+    const status = new Status({
+      userId: req.user._id,
+      type: "video",
+      video: uploadResponse.secure_url,
+      videoDuration: Number(duration) || 0,
+      trimStart: Number(trimStart) || 0,
+      trimEnd: Number(trimEnd) || 0,
+      caption: caption?.trim() || "",
+      visibility: visibility || "contacts",
+      specificUsers: specificUsers || []
+    });
+
+    await status.save();
+    await status.populate('userId', 'fullName username profilePic');
+
+    const contacts = await Status.getUserContacts(req.user._id);
+    contacts.forEach(contact => {
+      const contactSocketId = getReceiverSocketId(contact._id);
+      if (contactSocketId) {
+        io.to(contactSocketId).emit("newStatus", {
+          user: status.userId,
+          status: status,
+          type: "new"
+        });
+      }
+    });
+
+    const creatorSocketId = getReceiverSocketId(req.user._id);
+    if (creatorSocketId) {
+      io.to(creatorSocketId).emit("newStatus", {
+        user: status.userId,
+        status: status,
+        type: "new"
+      });
+    }
+
+    res.status(201).json({
+      message: "Video status created successfully",
+      status
+    });
+  } catch (error) {
+    console.error("Error creating video status:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 // Get my statuses
 export const getMyStatuses = async (req, res) => {
   try {
@@ -335,24 +402,25 @@ export const deleteStatus = async (req, res) => {
       return res.status(403).json({ error: "You can only delete your own status" });
     }
 
-    // If it's an image status, delete from Cloudinary
-    if (status.type === "image" && status.image) {
-      try {
-        // Extract public_id from Cloudinary URL
+    // Delete media from Cloudinary if present
+    try {
+      if (status.type === "image" && status.image) {
         const publicId = status.image.split('/').pop().split('.')[0];
         await cloudinary.uploader.destroy(`lynqit_status/${publicId}`);
-      } catch (cloudinaryError) {
-        console.error("Error deleting image from Cloudinary:", cloudinaryError);
-        // Continue with status deletion even if Cloudinary deletion fails
+      } else if (status.type === "video" && status.video) {
+        const publicId = status.video.split('/').pop().split('.')[0];
+        await cloudinary.uploader.destroy(`lynqit_status/${publicId}`, { resource_type: 'video' });
       }
+    } catch (cloudinaryError) {
+      console.error("Error deleting status media from Cloudinary:", cloudinaryError);
+      // Proceed even if Cloudinary deletion fails
     }
 
     await Status.findByIdAndDelete(statusId);
-
-    res.json({ message: "Status deleted successfully" });
+    return res.json({ message: "Status deleted successfully" });
   } catch (error) {
     console.error("Error deleting status:", error);
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
 

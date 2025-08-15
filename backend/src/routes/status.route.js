@@ -3,6 +3,7 @@ import { protectRoute } from "../middleware/auth.middleware.js";
 import {
   createTextStatus,
   createImageStatus,
+  createVideoStatus,
   getMyStatuses,
   getContactStatuses,
   viewStatus,
@@ -30,6 +31,9 @@ router.post("/text", createTextStatus);
 
 // Create image status with file upload
 router.post("/image", uploadMemory.single("image"), createImageStatus);
+
+// Create video status with file upload
+router.post("/video", uploadMemory.single("video"), createVideoStatus);
 
 // Get my statuses
 router.get("/my-statuses", getMyStatuses);

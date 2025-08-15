@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuthStore } from "../store/useAuthStore";
-import { Eye, EyeOff, Loader2, Lock, Mail, MessageSquare, User, Check, X, Info } from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock, Mail, User, Check, X, Info } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import GoogleButton from "../components/GoogleButton";
 import GoogleUsernamePrompt from "../components/GoogleUsernamePrompt";
@@ -147,7 +147,7 @@ const SignUpPage = () => {
         <div className="w-full max-w-md">
           {/* Header with App Logo */}
           <div className="flex items-center mb-5 justify-center">
-            <MessageSquare className="size-6 text-primary mr-2" />
+            <img src="/logo.svg" alt="LynqIt Logo" className="size-8 mr-2" />
             <div>
               <h1 className="text-xl font-semibold">Create Account</h1>
               <p className="text-xs text-base-content/60">Get started with your free account</p>

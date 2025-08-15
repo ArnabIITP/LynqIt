@@ -8,9 +8,9 @@ import BlockedUsersModal from "../components/BlockedUsersModal";
 import {
   ArrowLeft, Send, User, Lock, MessageSquare, Bell, Palette,
   HelpCircle, ChevronRight, Eye, EyeOff, Clock, ShieldAlert, LinkIcon,
-  Users, Ban, Smartphone, Volume, Volume2, VolumeX, Trash2, LogOut, UserX, Sun, Moon, Shield, Check, Info
+  Users, Ban, Smartphone, Volume, Volume2, VolumeX, Trash2, LogOut, UserX, Sun, Moon, Shield, Check, Info, X
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 
 const PREVIEW_MESSAGES = [
@@ -28,6 +28,7 @@ const SettingsTabs = {
 };
 
 const SettingsPage = () => {
+  const navigate = useNavigate();
   const { theme, setTheme } = useThemeStore();
   const { deleteAccount } = useChatStore();
   const { logout, authUser } = useAuthStore();
@@ -133,7 +134,15 @@ const SettingsPage = () => {
   };
 
   return (
-    <div className="h-screen pt-16">
+    <div className="h-screen pt-16 relative">
+      {/* Close Button */}
+      <button
+        aria-label="Close settings"
+        className="btn btn-ghost btn-sm btn-circle absolute top-2 right-2 z-20"
+        onClick={() => navigate(-1)}
+      >
+        <X size={18} />
+      </button>
       <div className="container mx-auto px-4 max-w-5xl h-full">
         <div className="flex h-full">
           {/* Sidebar Tabs */}
@@ -343,14 +352,6 @@ const AccountSettings = ({ onDeleteAccount, onLogout, user, showConfirmDelete, s
             Security Settings
           </button>
         </Link>
-
-        <button
-          className="btn btn-accent w-full justify-start gap-3 hover:btn-accent-focus"
-          onClick={onLogout}
-        >
-          <LogOut size={18} />
-          Logout
-        </button>
       </div>
     </section>
 
@@ -860,7 +861,7 @@ const ThemeSettings = ({ theme, setTheme }) => {
           <Sun className="w-4 h-4" />
           <Moon className="w-4 h-4" />
           <p>
-            Quick theme toggle is available in the top navigation bar.
+            Quick theme toggle is available in the sidebar.
             {autoThemeEnabled && " Auto theme mode (day/night) is currently enabled."}
           </p>
         </div>

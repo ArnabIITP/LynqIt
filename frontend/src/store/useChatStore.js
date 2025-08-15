@@ -1,12 +1,35 @@
 import { create } from "zustand";
+const CHAT_CACHE_KEY = 'lynqit_chat_cache_v1';
 import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios";
 import { useAuthStore } from "./useAuthStore";
 import { useStatusStore } from "./useStatusStore";
 
+function hydrateFromCache() {
+  try {
+    const raw = localStorage.getItem(CHAT_CACHE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function persistToCache(state) {
+  try {
+    localStorage.setItem(CHAT_CACHE_KEY, JSON.stringify({
+      users: state.users,
+      messages: state.messages,
+      lastMessageTimestamp: state.lastMessageTimestamp
+    }));
+  } catch {}
+}
+
+const initialCache = hydrateFromCache();
+
 export const useChatStore = create((set, get) => ({
-  messages: [],
-  users: [], // Users with existing conversations
+  messages: initialCache.messages || [],
+  users: initialCache.users || [], // Users with existing conversations
   allUsers: [], // All users for search
   selectedUser: null,
   isUsersLoading: false,
@@ -27,22 +50,39 @@ export const useChatStore = create((set, get) => ({
   replyingTo: null, // Tracks number of unread messages per user
   isDeletingMessage: false,
   connectionStatus: 'connected', // 'connected', 'connecting', 'disconnected'
-  lastMessageTimestamp: null, // Track last message received time for auto-refresh
+  lastMessageTimestamp: initialCache.lastMessageTimestamp || null, // Track last message received time for auto-refresh
+
+  // Clear a direct chat for current user (delete for me). If both sides clear, backend will delete permanently.
+  clearDirectChat: async (otherUserId) => {
+    try {
+      const res = await axiosInstance.post('/messages/clear', { chatType: 'direct', targetId: otherUserId });
+      // Optimistically clear messages from UI and refresh users list
+      set({ messages: [] });
+      await get().getUsers();
+      toast.success(res.data?.permanentDeletion ? 'Conversation deleted for everyone' : 'Chat cleared');
+      return res.data;
+    } catch (error) {
+      console.error('Error clearing chat:', error);
+      toast.error(error.response?.data?.message || 'Failed to clear chat');
+      throw error;
+    }
+  },
 
   getUsers: async () => {
     set({ isUsersLoading: true });
     try {
       const res = await axiosInstance.get("/messages/users");
-
       // Sort users to show pinned ones first
       const sortedUsers = [...res.data].sort((a, b) => {
         if (a.isPinned && !b.isPinned) return -1;
         if (!a.isPinned && b.isPinned) return 1;
         return 0;
       });
-
-      set({ users: sortedUsers });
-
+      set(state => {
+        const next = { ...state, users: sortedUsers };
+        persistToCache(next);
+        return { users: sortedUsers };
+      });
       // Get unread count for each user
       await get().getUnreadCounts();
     } catch (error) {
@@ -84,20 +124,22 @@ export const useChatStore = create((set, get) => ({
     set({ isMessagesLoading: true });
     try {
       const res = await axiosInstance.get(`/messages/${userId}`);
-      
       // Ensure messages are sorted chronologically by createdAt
       const sortedMessages = [...res.data].sort((a, b) => 
         new Date(a.createdAt) - new Date(b.createdAt)
       );
-      
-      set({ messages: sortedMessages });
-
-      // Set the timestamp of the latest message for auto-refresh comparison
-      if (sortedMessages && sortedMessages.length > 0) {
-        const latestMessage = sortedMessages[sortedMessages.length - 1];
-        set({ lastMessageTimestamp: new Date(latestMessage.createdAt).getTime() });
-      }
-
+      set(state => {
+        const next = { ...state, messages: sortedMessages };
+        // Update lastMessageTimestamp if available
+        if (sortedMessages && sortedMessages.length > 0) {
+          next.lastMessageTimestamp = new Date(sortedMessages[sortedMessages.length - 1].createdAt).getTime();
+        }
+        persistToCache(next);
+        return {
+          messages: sortedMessages,
+          lastMessageTimestamp: next.lastMessageTimestamp
+        };
+      });
       // Mark received messages as delivered
       const messagesToMark = res.data
         .filter(msg =>
@@ -105,16 +147,13 @@ export const useChatStore = create((set, get) => ({
           msg.status === 'sent'
         )
         .map(msg => msg._id);
-
       if (messagesToMark.length > 0) {
         get().markMessagesAsDelivered(messagesToMark);
       }
-
       // Mark all as seen if chat is currently open and mark chat as read
       setTimeout(() => {
         if (get().selectedUser?._id === userId) {
           get().markMessagesAsSeen(messagesToMark);
-
           // Mark chat as read using the proper API
           get().markChatAsRead('direct', userId);
         }
@@ -122,7 +161,6 @@ export const useChatStore = create((set, get) => ({
     } catch (error) {
       console.error("Error in getMessages:", error);
       toast.error(error.response?.data?.message || "Failed to load messages");
-
       // If there was an error loading messages, try to reconnect socket
       get().handleSocketReconnect();
     } finally {
@@ -264,29 +302,107 @@ export const useChatStore = create((set, get) => ({
     }));
   },
 
+  // Add a temporary uploading message (e.g., for audio) and return its tempId
+  addUploadingMessage: (data) => {
+    const { messages } = get();
+    const tempId = `temp-upload-${Date.now()}`;
+    const auth = useAuthStore.getState().authUser;
+    const pendingMessage = {
+      _id: tempId,
+      senderId: auth._id,
+      receiverId: get().selectedUser?._id || null,
+      text: data.text || "",
+      image: data.image || null,
+      mediaType: data.mediaType || null,
+      fileName: data.fileName || null,
+      fileSize: data.fileSize || null,
+      caption: data.caption || null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      status: 'sending',
+      reactions: [],
+      isPending: true,
+      uploadProgress: 0
+    };
+    set({ messages: [...messages, pendingMessage] });
+    return tempId;
+  },
+
+  // Update an uploading message by tempId
+  updateUploadingMessage: (tempId, patch) => {
+    set(state => ({
+      messages: state.messages.map(m => m._id === tempId ? { ...m, ...patch } : m)
+    }));
+  },
+
   sendMessage: async (messageData) => {
     const { selectedUser, messages } = get();
     const socket = useAuthStore.getState().socket;
 
     try {
       // Optimistically update UI with instant feedback
-      const tempId = `temp-${Date.now()}`;
-      const pendingMessage = {
-        _id: tempId,
-        senderId: useAuthStore.getState().authUser._id,
-        receiverId: selectedUser._id,
-        text: messageData.text || "",
-        image: messageData.image,
-        mediaType: messageData.mediaType,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        status: 'sending',
-        reactions: [],
-        isPending: true
-      };
-
-      // Instantly add message to UI for immediate feedback
-      set({ messages: [...messages, pendingMessage] });
+      // Reuse provided tempId if present (e.g., from uploading bubble)
+      const existingTempId = messageData.tempId;
+      const tempId = existingTempId || `temp-${Date.now()}`;
+      // Ensure video mediaType is preserved
+      let mediaType = messageData.mediaType;
+      
+      // Double-check for video URLs
+      if (messageData.image && typeof messageData.image === 'string') {
+        const videoExtensions = ['.mp4', '.mov', '.webm', '.avi', '.mkv', '.m4v'];
+        const isVideoByExtension = videoExtensions.some(ext => 
+          messageData.image.toLowerCase().includes(ext)
+        );
+        
+        if (isVideoByExtension && mediaType !== 'video') {
+          console.log('🎬 URL in store has video extension, forcing mediaType to video');
+          mediaType = 'video';
+        }
+      }
+      
+      console.log('📨 Creating pending message with mediaType:', mediaType, 
+        messageData.fileName, messageData.image?.substring(0, 50));
+      
+      // If an uploading message exists with this tempId, update it instead of adding a new one
+      const existingIndex = existingTempId ? messages.findIndex(m => m._id === existingTempId) : -1;
+      if (existingIndex >= 0) {
+        set(state => {
+          const updated = [...state.messages];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            text: messageData.text || updated[existingIndex].text || "",
+            image: messageData.image,
+            mediaType: mediaType,
+            fileName: messageData.fileName || updated[existingIndex].fileName,
+            fileSize: messageData.fileSize || updated[existingIndex].fileSize,
+            caption: messageData.caption || null,
+            updatedAt: new Date().toISOString(),
+            status: 'sending',
+            uploadProgress: 100
+          };
+          return { messages: updated };
+        });
+      } else {
+        const pendingMessage = {
+          _id: tempId,
+          senderId: useAuthStore.getState().authUser._id,
+          receiverId: selectedUser._id,
+          text: messageData.text || "",
+          image: messageData.image,
+          mediaType: mediaType,
+          fileName: messageData.fileName || null,
+          fileSize: messageData.fileSize || null,
+          caption: messageData.caption || null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          status: 'sending',
+          reactions: [],
+          isPending: true,
+          uploadProgress: 100 // Message is sent, so upload is complete
+        };
+        // Instantly add message to UI for immediate feedback
+        set({ messages: [...messages, pendingMessage] });
+      }
 
       // Try Socket.IO first for instant delivery
       let socketSuccess = false;
@@ -298,8 +414,10 @@ export const useChatStore = create((set, get) => ({
           const ackPromise = new Promise((resolve, reject) => {
             const timeout = setTimeout(() => reject(new Error('Socket timeout')), 5000);
 
+            // Ensure we're sending the correct mediaType in the socket message
             socket.emit("sendMessage", {
               ...messageData,
+              mediaType: pendingMessage.mediaType, // Use the validated mediaType
               receiverId: selectedUser._id,
               tempId: tempId
             }, (acknowledgment) => {
@@ -414,7 +532,7 @@ export const useChatStore = create((set, get) => ({
   },
 
   // Reply to a message
-  replyToMessage: async (messageId, replyText, image = null, mediaType = null) => {
+  replyToMessage: async (messageId, replyText, image = null, mediaType = null, fileName = null, fileSize = null, caption = null) => {
     const { selectedUser, replyingTo, messages } = get();
 
     try {
@@ -427,6 +545,9 @@ export const useChatStore = create((set, get) => ({
         text: replyText || "",
         image: image,
         mediaType: mediaType,
+        fileName: fileName,
+        fileSize: fileSize,
+        caption: caption,
         replyTo: replyingTo, // Use the full replyingTo object
         isReply: true,
         createdAt: new Date().toISOString(),
@@ -443,6 +564,9 @@ export const useChatStore = create((set, get) => ({
         text: replyText,
         image,
         mediaType,
+        fileName,
+        fileSize,
+        caption,
         receiverId: selectedUser?._id
       };
 
@@ -1274,40 +1398,7 @@ export const useChatStore = create((set, get) => ({
     }
 
     // Start heartbeat interval to update last seen (reduced frequency)
-    const heartbeatInterval = setInterval(() => {
-      get().updateLastSeen();
-
-      // Also periodically request user statuses (unread counts are handled via real-time events)
-      if (socket.connected) {
-        socket.emit("getUserStatuses");
-      }
-    }, 60000); // Every 60 seconds (reduced from 15 seconds)
-
-    // Set up periodic polling for new messages as a backup to sockets
-    const messagePollingInterval = setInterval(() => {
-      // Check if we have an active conversation and either:
-      // 1. Socket is disconnected, OR
-      // 2. It's been more than 15 seconds since our last message update
-      const selectedUser = get().selectedUser;
-      const connectionStatus = get().connectionStatus;
-      const lastMessageTimestamp = get().lastMessageTimestamp;
-      const now = Date.now();
-      
-      if (selectedUser && (
-        connectionStatus !== 'connected' || 
-        (lastMessageTimestamp && (now - lastMessageTimestamp > 15000))
-      )) {
-        console.log("🔄 Polling for new messages as backup mechanism");
-        // Re-fetch messages for current conversation
-        get().getMessages(selectedUser._id);
-      }
-    }, 8000); // Poll every 8 seconds when needed
-
-    // Store the interval IDs for cleanup
-    set({
-      heartbeatInterval,
-      messagePollingInterval
-    });
+    // Heartbeat and polling removed for pure real-time updates via sockets.
   },
 
   unsubscribeFromMessages: () => {

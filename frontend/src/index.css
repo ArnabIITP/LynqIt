@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import skeleton styling */
+@import './components/skeleton-styles.css';
+/* Design system */
+@import './theme/design-system.css';
+
 /* Reset for full-height mobile screens */
 html, body, #root {
   height: 100%;
@@ -86,4 +91,169 @@ html, body, #root {
 @keyframes moveRight {
   0% { left: -5px; }
   100% { left: 100%; }
+}
+
+/* Enhanced Dark Mode Effects */
+/* Subtle glow effect for important elements in dark mode */
+[data-theme='dark'] .glow-effect {
+  box-shadow: 0 0 8px rgba(79, 70, 229, 0.4);
+  transition: box-shadow 0.3s ease;
+}
+
+[data-theme='dark'] .glow-effect:hover {
+  box-shadow: 0 0 15px rgba(79, 70, 229, 0.6);
+}
+
+/* Glass morphism effect for dark mode modals and panels */
+[data-theme='dark'] .glass-panel {
+  background: rgba(30, 30, 30, 0.7);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(75, 75, 75, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* Gradient accents for dark mode */
+[data-theme='dark'] .gradient-accent {
+  background: linear-gradient(135deg, #1F3A33 0%, #2C7A7B 100%);
+}
+
+[data-theme='dark'] .gradient-button {
+  background: linear-gradient(to right, #4F46E5, #2C7A7B);
+  transition: all 0.3s ease;
+}
+
+[data-theme='dark'] .gradient-button:hover {
+  background: linear-gradient(to right, #4F46E5, #38B2AC);
+  transform: translateY(-1px);
+}
+
+/* Improved message bubbles in dark mode */
+[data-theme='dark'] .message-bubble-out {
+  background: linear-gradient(135deg, #1F3A33 0%, #163832 100%);
+  box-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.13);
+}
+
+[data-theme='dark'] .message-bubble-in {
+  background: #2D2D30;
+  box-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.13);
+}
+
+/* Subtle border glow for active chat in dark mode */
+[data-theme='dark'] .active-chat {
+  border-left: 3px solid #4F46E5;
+  box-shadow: inset 0 0 8px rgba(79, 70, 229, 0.2);
+}
+
+/* Dark mode optimized scrollbar */
+[data-theme='dark'] ::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-track {
+  background: #121212;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: #3A3A3C;
+  border-radius: 10px;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
+  background: #4F46E5;
+}
+
+/* Sidebar text colors in dark mode */
+[data-theme='dark'] .text-charcoal,
+[data-theme='dark'] .text-dark-gray,
+[data-theme='dark'] .text-charcoal\/70,
+[data-theme='dark'] .text-charcoal\/60,
+[data-theme='dark'] .text-charcoal\/50 {
+  color: #FFFFFF !important;
+}
+
+/* Preserve tangerine color in dark mode */
+[data-theme='dark'] .text-tangerine {
+  color: #FFA500 !important; /* Pure tangerine color */
+}
+
+[data-theme='dark'] .text-medium-gray,
+[data-theme='dark'] .text-charcoal\/40,
+[data-theme='dark'] .text-zinc-500,
+[data-theme='dark'] .text-zinc-400,
+[data-theme='dark'] .text-base-content\/60 {
+  color: #CDCDCD !important;
+}
+
+/* Make input text white in dark mode */
+[data-theme='dark'] input.bg-transparent {
+  color: #FFFFFF !important;
+}
+
+[data-theme='dark'] input.bg-transparent::placeholder {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+/* Button hover effects for dark mode */
+[data-theme='dark'] .btn-primary {
+  transition: all 0.3s ease;
+  background: #2C7A7B;
+}
+
+[data-theme='dark'] .btn-primary:hover {
+  background: #38B2AC;
+  box-shadow: 0 0 10px rgba(56, 178, 172, 0.4);
+}
+
+/* AI Chat bubbles in dark mode */
+[data-theme='dark'] .bg-chat-bubble-primary {
+  background-color: #FFA500 !important; /* Tangerine */
+}
+
+[data-theme='dark'] .bg-light-gray.text-medium-gray,
+[data-theme='dark'] .bg-light-gray.text-text {
+  background-color: #2D2D30 !important; /* Dark mode chat bubble */
+  color: #F5F5F5 !important; /* Light text for readability */
+}
+
+/* Sidebar item hover effects for dark mode */
+[data-theme='dark'] [class*="hover:bg-charcoal/5"],
+[data-theme='dark'] [class*="hover:bg-base-300"] {
+  transition: all 0.3s ease;
+}
+
+[data-theme='dark'] [class*="hover:bg-charcoal/5"]:hover,
+[data-theme='dark'] [class*="hover:bg-base-300"]:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Active sidebar item in dark mode */
+[data-theme='dark'] .bg-tangerine\/10 {
+  background-color: rgba(255, 165, 0, 0.2) !important; /* Tangerine color with opacity */
+  box-shadow: 0 0 10px rgba(255, 165, 0, 0.15) !important;
+}
+
+/* Search bar in dark mode */
+[data-theme='dark'] .bg-charcoal\/5 {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+[data-theme='dark'] .bg-charcoal\/5:hover,
+[data-theme='dark'] .bg-charcoal\/10:hover {
+  background-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* AI Assistant styles in dark mode */
+[data-theme='dark'] .bg-light-gray,
+[data-theme='dark'] .bg-primary\/10,
+[data-theme='dark'] .bg-primary\/20 {
+  background-color: rgba(255, 165, 0, 0.15) !important; /* Tangerine with opacity */
+}
+
+[data-theme='dark'] .bg-primary {
+  background-color: #FFA500 !important; /* Tangerine */
+}
+
+[data-theme='dark'] .shadow-message {
+  box-shadow: 0 2px 8px rgba(255, 165, 0, 0.15) !important;
 }

@@ -13,7 +13,8 @@ import {
   replyToMessage,
   markMentionsAsRead,
   getFirstUnreadMention,
-  forwardMessage
+  forwardMessage,
+  clearChat
 } from "../controllers/message.controller.js";
 
 import {
@@ -48,6 +49,7 @@ router.post("/lastseen", protectRoute, updateLastSeen);
 router.post("/reaction", protectRoute, reactToMessage);
 router.post("/reply", protectRoute, replyToMessage);
 router.post("/forward", protectRoute, forwardMessage);
+router.post("/clear", protectRoute, clearChat);
 
 // Message modification routes
 router.put("/:id", protectRoute, editMessage);

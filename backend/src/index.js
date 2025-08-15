@@ -17,6 +17,7 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 import authRoutes from "./routes/auth.route.js";
+import linkPreviewRoutes from "./routes/linkPreview.route.js";
 import messageRoutes from "./routes/message.route.js";
 import groupRoutes from "./routes/group.route.js";
 import twofaRoutes from "./routes/twofa.route.js";
@@ -24,7 +25,11 @@ import userRoutes from "./routes/user.route.js";
 import statusRoutes from "./routes/status.route.js";
 import supportRoutes from "./routes/support.route.js";
 import aiRoutes from "./routes/ai.route.js";
+import uploadRoutes from "./routes/upload.route.js";
+import pollEventRoutes from "./routes/pollEvent.route.js";
 import { app, server } from "./lib/socket.js";
+import { cleanupOldMedia } from "./lib/cleanup.js";
+import adminRoutes from "./routes/admin.route.js";
 
 dotenv.config();
 
@@ -33,8 +38,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Basic middleware
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: '100mb' }));  // Increased from 50mb to match Cloudinary limit
+app.use(express.urlencoded({ extended: true, limit: '100mb' })); // Increased from 50mb
 app.use(cookieParser());
 
 // Function to get allowed origins based on environment
@@ -89,6 +94,7 @@ app.use((req, res, next) => {
 
 // API routes - important to define these before the static file middleware
 app.use("/api/auth", authRoutes);
+app.use("/api/link-preview", linkPreviewRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/groups", groupRoutes);
 app.use("/api/2fa", twofaRoutes);
@@ -96,6 +102,13 @@ app.use("/api/users", userRoutes);
 app.use("/api/status", statusRoutes);
 app.use("/api/support", supportRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/api/upload", uploadRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api", pollEventRoutes);
+
+// Import and use the download route
+import downloadRoutes from "./routes/download.route.js";
+app.use("/api/download", downloadRoutes);
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {
@@ -160,4 +173,18 @@ server.listen(PORT, () => {
   console.log(`Socket.IO: Configured with path: /socket.io`);
   console.log(`Allowed Origins:`, getAllowedOrigins());
   connectDB();
+  // Schedule daily media cleanup at startup
+  const dayMs = 24 * 60 * 60 * 1000;
+  async function runCleanup(label = 'startup') {
+    try {
+      const { scanned, deleted } = await cleanupOldMedia();
+      console.log(`[media-cleanup:${label}] scanned=${scanned} deleted=${deleted} retentionDays=${process.env.MEDIA_RETENTION_DAYS || 90}`);
+    } catch (e) {
+      console.error(`[media-cleanup:${label}] error`, e?.message);
+    }
+  }
+  // Initial run after DB is connected (small delay)
+  setTimeout(() => runCleanup('initial'), 10_000);
+  // Repeat daily
+  setInterval(() => runCleanup('interval'), dayMs);
 });

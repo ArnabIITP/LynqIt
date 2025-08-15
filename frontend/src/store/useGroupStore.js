@@ -1,13 +1,35 @@
 import { create } from "zustand";
+const GROUP_CACHE_KEY = 'lynqit_group_cache_v1';
 import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios";
 import { useAuthStore } from "./useAuthStore";
 import { useChatStore } from "./useChatStore";
 
+function hydrateGroupCache() {
+  try {
+    const raw = localStorage.getItem(GROUP_CACHE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function persistGroupCache(state) {
+  try {
+    localStorage.setItem(GROUP_CACHE_KEY, JSON.stringify({
+      groups: state.groups,
+      groupMessages: state.groupMessages
+    }));
+  } catch {}
+}
+
+const initialGroupCache = hydrateGroupCache();
+
 export const useGroupStore = create((set, get) => ({
-  groups: [],
+  groups: initialGroupCache.groups || [],
   selectedGroup: null,
-  groupMessages: [],
+  groupMessages: initialGroupCache.groupMessages || [],
   isGroupsLoading: false,
   isGroupMessagesLoading: false,
   isCreatingGroup: false,
@@ -18,15 +40,17 @@ export const useGroupStore = create((set, get) => ({
     set({ isGroupsLoading: true });
     try {
       const res = await axiosInstance.get("/groups");
-
       // Sort groups to show pinned ones first
       const sortedGroups = [...res.data].sort((a, b) => {
         if (a.isPinned && !b.isPinned) return -1;
         if (!a.isPinned && b.isPinned) return 1;
         return 0;
       });
-
-      set({ groups: sortedGroups });
+      set(state => {
+        const next = { ...state, groups: sortedGroups };
+        persistGroupCache(next);
+        return { groups: sortedGroups };
+      });
     } catch (error) {
       console.error("Error fetching groups:", error);
       toast.error(error.response?.data?.message || "Failed to load groups");
@@ -42,12 +66,8 @@ export const useGroupStore = create((set, get) => ({
       const res = await axiosInstance.post("/groups", groupData);
       const newGroup = res.data;
 
-      set(state => ({
-        groups: [newGroup, ...state.groups]
-      }));
-
-      toast.success("Group created successfully!");
-      return newGroup;
+  // Do not update state or show toast here; socket event will handle both
+  return newGroup;
     } catch (error) {
       console.error("Error creating group:", error);
       toast.error(error.response?.data?.message || "Failed to create group");
@@ -62,13 +82,59 @@ export const useGroupStore = create((set, get) => ({
     set({ isGroupMessagesLoading: true });
     try {
       const res = await axiosInstance.get(`/groups/${groupId}/messages`);
-      set({ groupMessages: res.data });
+      set(state => {
+        const next = { ...state, groupMessages: res.data };
+        persistGroupCache(next);
+        return { groupMessages: res.data };
+      });
     } catch (error) {
       console.error("Error fetching group messages:", error);
       toast.error(error.response?.data?.message || "Failed to load group messages");
     } finally {
       set({ isGroupMessagesLoading: false });
     }
+  },
+
+  // Create a temporary uploading message bubble for group chat and return its tempId
+  addGroupUploadingMessage: (groupId, data) => {
+    const { groupMessages } = get();
+    const auth = useAuthStore.getState().authUser;
+    const effectiveGroupId = groupId || get().selectedGroup?._id;
+    const tempId = `temp-group-upload-${Date.now()}`;
+
+    const pendingMessage = {
+      _id: tempId,
+      senderId: {
+        _id: auth._id,
+        fullName: auth.fullName,
+        username: auth.username,
+        profilePic: auth.profilePic
+      },
+      groupId: effectiveGroupId,
+      messageType: 'group',
+      text: data?.text || "",
+      image: data?.image || null,
+      mediaType: data?.mediaType || null,
+      fileName: data?.fileName || null,
+      fileSize: data?.fileSize || null,
+      caption: data?.caption || null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      status: 'sending',
+      reactions: [],
+      isPending: true,
+      uploadProgress: 0
+    };
+
+    set({ groupMessages: [...groupMessages, pendingMessage] });
+    return tempId;
+  },
+
+  // Patch a temporary uploading group message by tempId
+  updateGroupUploadingMessage: (tempId, patch) => {
+    set(state => ({
+      groupMessages: state.groupMessages.map(m => m._id === tempId ? { ...m, ...patch } : m)
+    }));
   },
 
   // Send group message with Socket.IO optimization
@@ -78,8 +144,8 @@ export const useGroupStore = create((set, get) => ({
 
 
     try {
-      // Optimistic update
-      const tempId = `temp-${Date.now()}`;
+  // Optimistic update - reuse provided tempId if exists
+  const tempId = messageData.tempId || `temp-${Date.now()}`;
       const pendingMessage = {
         _id: tempId,
         senderId: {
@@ -93,6 +159,9 @@ export const useGroupStore = create((set, get) => ({
         text: messageData.text || "",
         image: messageData.image,
         mediaType: messageData.mediaType,
+        fileName: messageData.fileName || null,
+        fileSize: messageData.fileSize || null,
+        caption: messageData.caption || null,
         mentions: messageData.mentions || [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -101,8 +170,9 @@ export const useGroupStore = create((set, get) => ({
         isPending: true
       };
 
-      // Instantly add message to UI for immediate feedback
-      set({ groupMessages: [...groupMessages, pendingMessage] });
+  // Instantly add message to UI for immediate feedback (avoid duplicate if already present)
+  const exists = groupMessages.some(m => m._id === tempId);
+  set({ groupMessages: exists ? groupMessages.map(m => m._id === tempId ? { ...m, ...pendingMessage } : m) : [...groupMessages, pendingMessage] });
 
       // Try Socket.IO first for instant delivery
       let socketSuccess = false;
@@ -447,6 +517,21 @@ export const useGroupStore = create((set, get) => ({
       }, 100);
     });
 
+    // Listen for message updates (poll votes / event RSVPs)
+    socket.on("groupMessageUpdated", (updatedMessage) => {
+      try {
+        const groupId = updatedMessage.groupId || (typeof updatedMessage.groupId === 'object' ? updatedMessage.groupId._id : null);
+        const { selectedGroup } = get();
+        if (selectedGroup && selectedGroup._id === groupId) {
+          set(state => ({
+            groupMessages: state.groupMessages.map(m => m._id === updatedMessage._id ? updatedMessage : m)
+          }));
+        }
+      } catch (e) {
+        console.error('Error applying groupMessageUpdated', e);
+      }
+    });
+
     // Listen for new groups
     socket.on("newGroup", (group) => {
       set(state => ({
@@ -750,6 +835,23 @@ export const useGroupStore = create((set, get) => ({
     }
   },
 
+  // Clear a group chat for the current user (delete for me)
+  clearGroupChat: async (groupId) => {
+    try {
+      const res = await axiosInstance.post('/messages/clear', { chatType: 'group', targetId: groupId });
+      // Optimistically clear messages if this is the selected group
+      set(state => ({
+        groupMessages: state.selectedGroup?._id === groupId ? [] : state.groupMessages
+      }));
+      toast.success('Group chat cleared for you');
+      return res.data;
+    } catch (error) {
+      console.error('Error clearing group chat:', error);
+      toast.error(error.response?.data?.message || 'Failed to clear group chat');
+      throw error;
+    }
+  },
+
   // Join group via invite link
   joinGroupViaLink: async (groupId, token) => {
     try {
@@ -842,7 +944,7 @@ export const useGroupStore = create((set, get) => ({
   },
 
   // Reply to a group message
-  replyToGroupMessage: async (messageId, replyText, image = null, mediaType = null) => {
+  replyToGroupMessage: async (messageId, replyText, image = null, mediaType = null, fileName = null, fileSize = null, caption = null) => {
     const { selectedGroup, groupMessages } = get();
 
     try {
@@ -867,6 +969,9 @@ export const useGroupStore = create((set, get) => ({
         text: replyText || "",
         image: image,
         mediaType: mediaType,
+        fileName: fileName,
+        fileSize: fileSize,
+        caption: caption,
         replyTo: replyingTo, // Use the full replyingTo object
         isReply: true,
         mentions: mentions,

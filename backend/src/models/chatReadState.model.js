@@ -44,11 +44,20 @@ const chatReadStateSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
+// Track when a user cleared a chat (delete-for-me). Messages at or before this timestamp are hidden for that user.
+chatReadStateSchema.add({
+    clearedAt: {
+        type: Date,
+        default: null
+    }
+});
+
 // Compound index for efficient queries
 chatReadStateSchema.index({ userId: 1, chatId: 1 }, { unique: true });
 chatReadStateSchema.index({ userId: 1, chatType: 1 });
 chatReadStateSchema.index({ userId: 1, targetId: 1 });
 chatReadStateSchema.index({ lastSeenTimestamp: 1 });
+chatReadStateSchema.index({ clearedAt: 1 });
 
 // Helper method to generate chat ID
 chatReadStateSchema.statics.generateChatId = function(chatType, userId, targetId) {

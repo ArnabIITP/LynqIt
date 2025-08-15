@@ -24,6 +24,7 @@ const StatusViewer = ({ isOpen, onClose, contactStatuses, initialContactIndex = 
 
   const progressRef = useRef(null);
   const timeoutRef = useRef(null);
+  const videoRef = useRef(null);
 
   const {
     viewStatus,
@@ -91,6 +92,34 @@ const StatusViewer = ({ isOpen, onClose, contactStatuses, initialContactIndex = 
   useEffect(() => {
     setProgress(0);
   }, [currentContactIndex, currentStatusIndex]);
+
+  // When switching to a video status, seek to trimStart once metadata is loaded
+  useEffect(() => {
+    if (!currentStatus || currentStatus.type !== 'video') return;
+    const v = videoRef.current;
+    if (!v) return;
+    const handleLoaded = () => {
+      const start = Number(currentStatus.trimStart || 0);
+      if (start > 0 && v.duration) {
+        try { v.currentTime = Math.min(start, v.duration - 0.1); } catch {}
+      }
+    };
+    v.addEventListener('loadedmetadata', handleLoaded);
+    return () => v.removeEventListener('loadedmetadata', handleLoaded);
+  }, [currentStatus]);
+
+  const handleVideoTimeUpdate = () => {
+    const v = videoRef.current;
+    if (!v || !currentStatus || currentStatus.type !== 'video') return;
+    const start = Number(currentStatus.trimStart || 0);
+    const end = Number(currentStatus.trimEnd || 0);
+    if (end > 0 && v.currentTime >= end - 0.05) {
+      // Loop back within trimmed range
+      const seekTo = start > 0 ? start : 0;
+      try { v.currentTime = seekTo; } catch {}
+      v.play().catch(() => {});
+    }
+  };
 
   // Check if user has already reacted to current status
   useEffect(() => {
@@ -207,7 +236,6 @@ const StatusViewer = ({ isOpen, onClose, contactStatuses, initialContactIndex = 
     if (window.confirm("Are you sure you want to delete this status?")) {
       try {
         await deleteStatus(currentStatus._id);
-        toast.success("Status deleted");
         onClose();
       } catch (error) {
         console.error("Error deleting status:", error);
@@ -408,12 +436,28 @@ const StatusViewer = ({ isOpen, onClose, contactStatuses, initialContactIndex = 
               {currentStatus.text}
             </div>
           </div>
-        ) : (
+        ) : currentStatus.type === 'image' ? (
           <div className="relative w-full h-full">
             <img
               src={currentStatus.image}
               alt="Status"
               className="w-full h-full object-contain"
+            />
+            {currentStatus.caption && (
+              <div className="absolute bottom-20 left-4 right-4 bg-black/50 text-white p-4 rounded-lg">
+                {currentStatus.caption}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="relative w-full h-full">
+            <video
+              ref={videoRef}
+              src={currentStatus.video}
+              className="w-full h-full"
+              controls
+              autoPlay
+              onTimeUpdate={handleVideoTimeUpdate}
             />
             {currentStatus.caption && (
               <div className="absolute bottom-20 left-4 right-4 bg-black/50 text-white p-4 rounded-lg">

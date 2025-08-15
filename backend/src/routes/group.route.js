@@ -1,4 +1,6 @@
+
 import express from "express";
+const router = express.Router();
 import { protectRoute } from "../middleware/auth.middleware.js";
 
 import {
@@ -15,16 +17,19 @@ import {
     generateInviteLink,
     revokeInviteLink,
     deleteGroup,
-    rotateGroupKey
+    rotateGroupKey,
+    reportGroup
 } from "../controllers/group.controller.js";
+
+// Report group
+router.post("/:groupId/report", protectRoute, reportGroup);
+
 import {
     getGroupMessages,
     sendGroupMessage,
     updateGroupMessageStatus,
     getGroupMessageInfo
 } from "../controllers/message.controller.js";
-
-const router = express.Router();
 
 // Group management routes
 router.get("/", protectRoute, getUserGroups);

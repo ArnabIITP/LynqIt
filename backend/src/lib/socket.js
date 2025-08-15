@@ -23,18 +23,21 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
     credentials: true
   },
-  // Optimized settings for real-time performance
-  pingTimeout: 30000,        // Reduced from 60s to 30s for faster detection
-  pingInterval: 5000,        // Ping every 5 seconds for more frequent health checks
-  upgradeTimeout: 10000,     // Faster upgrade timeout
+  // Optimized settings for real-time performance and large file uploads
+  pingTimeout: 60000,        // Increased to 60s for better stability during uploads
+  pingInterval: 10000,       // Ping every 10 seconds (less aggressive)
+  upgradeTimeout: 15000,     // More lenient upgrade timeout
   allowEIO3: true,           // Allow Engine.IO v3 clients
   transports: ['websocket', 'polling'], // Prefer websocket, fallback to polling
   allowUpgrades: true,       // Allow transport upgrades
-  perMessageDeflate: false,  // Disable compression for lower latency
-  httpCompression: false,    // Disable HTTP compression for real-time
-  maxHttpBufferSize: 1e6,    // 1MB max buffer size
-  connectTimeout: 5000,      // 5 second connection timeout
-  path: '/socket.io'         // Explicit path for socket.io
+  perMessageDeflate: true,   // Enable compression for better performance with large files
+  httpCompression: true,     // Enable HTTP compression
+  maxHttpBufferSize: 1e8,    // 100MB max buffer size for large files
+  connectTimeout: 15000,     // 15 second connection timeout
+  path: '/socket.io',        // Explicit path for socket.io
+  reconnectionAttempts: 10,  // Maximum number of reconnection attempts
+  reconnectionDelay: 1000,   // Initial delay between reconnection attempts in ms
+  reconnectionDelayMax: 5000 // Maximum delay between reconnection attempts
 });
 
 // used to store online users - making the map as global variable to ensure consistent access
@@ -394,13 +397,13 @@ io.on("connection", async (socket) => {
 
       // Process the deletion based on type
       if (deleteType === 'everyone') {
-        // For "delete for everyone", check time window (within 60 minutes)
+        // For "delete for everyone", check time window (within 24 hours from sent time)
         const messageDate = new Date(message.createdAt);
         const now = new Date();
-        const minutesDiff = (now - messageDate) / (1000 * 60);
+        const hoursDiff = (now - messageDate) / (1000 * 60 * 60);
 
-        if (minutesDiff > 60) {
-          console.log(`❌ Time window exceeded for deleting message ${messageId}: ${minutesDiff} minutes`);
+        if (hoursDiff > 24) {
+          console.log(`❌ Time window exceeded for deleting message ${messageId}: ${hoursDiff.toFixed(2)} hours`);
           return callback?.({ success: false, error: "Deletion time window expired" });
         }
         
@@ -680,8 +683,15 @@ io.on("connection", async (socket) => {
   socket.on("sendMessage", async (messageData, callback) => {
     try {
       console.log("📤 Received message via Socket.IO:", messageData);
+      console.log("💾 Received message data:", JSON.stringify({
+        hasImage: !!messageData.image,
+        mediaType: messageData.mediaType,
+        isUrl: messageData.image && typeof messageData.image === 'string' && messageData.image.startsWith('http'),
+        fileName: messageData.fileName,
+        fileSize: messageData.fileSize
+      }, null, 2));
 
-      const { text, image, mediaType, receiverId, tempId } = messageData;
+      const { text, image, mediaType, receiverId, tempId, fileName, fileSize, caption } = messageData;
 
       // Validate required fields
       if (!receiverId) {
@@ -692,14 +702,48 @@ io.on("connection", async (socket) => {
       const Message = (await import("../models/message.model.js")).default;
       const cloudinary = (await import("./cloudinary.js")).default;
 
-      let imageUrl;
+      let imageUrl = null;
       if (image) {
-        try {
-          const uploadResponse = await cloudinary.uploader.upload(image);
-          imageUrl = uploadResponse.secure_url;
-        } catch (uploadError) {
-          console.error("Error uploading image:", uploadError);
-          return callback({ success: false, error: "Failed to upload image" });
+        if (typeof image === 'string' && image.startsWith('http')) {
+          imageUrl = image;
+          console.log("✅ Using existing URL for media: " + mediaType);
+        } else {
+          try {
+            // Try to detect mimetype from base64 string (if possible)
+            let resourceType = 'auto';
+            let detectedType = mediaType;
+            if (typeof image === 'string' && image.startsWith('data:')) {
+              const match = image.match(/^data:([\w\-]+\/[\w\-]+);/);
+              if (match && match[1]) {
+                const mimetype = match[1];
+                if (mimetype.startsWith('image/')) resourceType = 'image';
+                else if (mimetype.startsWith('video/')) resourceType = 'video';
+                else if (mimetype.startsWith('audio/')) resourceType = 'video'; // Cloudinary uses video for audio/music
+                else resourceType = 'raw';
+                detectedType = mimetype.split('/')[0];
+                console.log(`� Detected mimetype: ${mimetype}, resourceType: ${resourceType}`);
+              }
+            } else {
+              // fallback to mediaType
+              if (mediaType === 'video' || mediaType === 'audio' || mediaType === 'music') resourceType = 'video';
+              else if (mediaType === 'document') resourceType = 'raw';
+              else if (mediaType === 'image' || mediaType === 'gif') resourceType = 'image';
+            }
+            const uploadOptions = { 
+              resource_type: resourceType,
+              timeout: 120000 // 2 minute timeout for larger files
+            };
+            console.log(`🔄 Uploading to Cloudinary with options:`, uploadOptions);
+            const uploadResponse = await cloudinary.uploader.upload(image, uploadOptions);
+            console.log(`✅ Upload successful: ${uploadResponse.secure_url}`);
+            imageUrl = uploadResponse.secure_url;
+          } catch (uploadError) {
+            console.error("❌ Error uploading media:", uploadError);
+            return callback({ 
+              success: false, 
+              error: `Failed to upload ${mediaType || 'file'}: ${uploadError.message || 'Unknown error'}` 
+            });
+          }
         }
       }
 
@@ -709,7 +753,10 @@ io.on("connection", async (socket) => {
         receiverId,
         text: text || "",
         image: imageUrl,
-        mediaType
+        mediaType,
+        fileName: fileName || null,
+        fileSize: fileSize || null,
+        caption: caption || null
       });
 
       await newMessage.save();
@@ -775,8 +822,15 @@ io.on("connection", async (socket) => {
   socket.on("sendGroupMessage", async (messageData, callback) => {
     try {
       console.log("📤 Received group message via Socket.IO:", messageData);
+      console.log("💾 Received group message data:", JSON.stringify({
+        hasImage: !!messageData.image,
+        mediaType: messageData.mediaType,
+        isUrl: messageData.image && typeof messageData.image === 'string' && messageData.image.startsWith('http'),
+        fileName: messageData.fileName,
+        fileSize: messageData.fileSize
+      }, null, 2));
 
-      const { text, image, mediaType, groupId, tempId, mentions } = messageData;
+      const { text, image, mediaType, groupId, tempId, mentions, fileName, fileSize, caption } = messageData;
 
       // Validate required fields
       if (!groupId) {
@@ -802,14 +856,39 @@ io.on("connection", async (socket) => {
         return callback({ success: false, error: "You are not a member of this group" });
       }
 
-      let imageUrl;
+      let imageUrl = null;
       if (image) {
-        try {
-          const uploadResponse = await cloudinary.uploader.upload(image);
-          imageUrl = uploadResponse.secure_url;
-        } catch (uploadError) {
-          console.error("Error uploading group message image:", uploadError);
-          return callback({ success: false, error: "Failed to upload image" });
+        if (typeof image === 'string' && image.startsWith('http')) {
+          imageUrl = image;
+          console.log("✅ Using existing URL for group media: " + mediaType);
+        } else {
+          try {
+            let resourceType = 'auto';
+            if (mediaType === 'video' || mediaType === 'audio' || mediaType === 'music') {
+              resourceType = 'video';
+              console.log("🎬 Using video resource_type for group: " + mediaType);
+            } else if (mediaType === 'document') {
+              resourceType = 'raw';
+              console.log("📄 Using raw resource_type for group document");
+            } else if (mediaType === 'image' || mediaType === 'gif') {
+              resourceType = 'image';
+              console.log("🖼️ Using image resource_type for group: " + mediaType);
+            }
+            const uploadOptions = { 
+              resource_type: resourceType,
+              timeout: 120000 // 2 minute timeout for larger files
+            };
+            console.log(`🔄 Uploading to Cloudinary with options:`, uploadOptions);
+            const uploadResponse = await cloudinary.uploader.upload(image, uploadOptions);
+            console.log(`✅ Upload successful: ${uploadResponse.secure_url}`);
+            imageUrl = uploadResponse.secure_url;
+          } catch (uploadError) {
+            console.error("❌ Error uploading group media:", uploadError);
+            return callback({ 
+              success: false, 
+              error: `Failed to upload ${mediaType || 'file'}: ${uploadError.message || 'Unknown error'}` 
+            });
+          }
         }
       }
 
@@ -821,7 +900,10 @@ io.on("connection", async (socket) => {
         text: text || "",
         image: imageUrl,
         mediaType,
-        mentions: mentions || []
+        mentions: mentions || [],
+        fileName: fileName || null,
+        fileSize: fileSize || null,
+        caption: caption || null
       });
 
       await newMessage.save();

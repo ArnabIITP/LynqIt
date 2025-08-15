@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { Camera, Mail, User, Eye, EyeOff, Check, X, Info, Save, Edit, Lock, FileText, QrCode, RefreshCw, MessageSquare } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { useThemeStore } from "../store/useThemeStore";
 import bcrypt from "bcryptjs-react";
@@ -9,6 +10,7 @@ import { toast } from "react-hot-toast";
 import PasswordStrengthMeter from "../components/PasswordStrengthMeter";
 
 const ProfilePage = () => {
+  const navigate = useNavigate();
   const { authUser, isUpdatingProfile, updateProfile } = useAuthStore();
   const { messages, users, getMessages } = useChatStore();
   const { theme } = useThemeStore(); // Get current theme
@@ -49,11 +51,11 @@ const ProfilePage = () => {
     lastChanged: null
   });
   
-  // QR code styling based on theme
-  const [qrCodeStyles, setQrCodeStyles] = useState({
-    fgColor: "#7B5CF0",
+  // QR code styling: always tangerine
+  const qrCodeStyles = {
+    fgColor: "#FFA500",
     logoOpacity: 1
-  });
+  };
   
   // State for QR code data and expiration
   const [qrCodeData, setQrCodeData] = useState("");
@@ -207,44 +209,7 @@ const ProfilePage = () => {
     return () => clearInterval(timer);
   }, [nextRotation]);
   
-  // Update QR code styling when theme changes
-  useEffect(() => {
-    // Theme-specific colors
-    const themeColors = {
-      light: "#7B5CF0", // purple
-      dark: "#A78BFA", // lighter purple
-      cupcake: "#EAB308", // yellow
-      bumblebee: "#F59E0B", // amber
-      emerald: "#10B981", // emerald
-      corporate: "#2563EB", // blue
-      synthwave: "#E779C1", // pink
-      retro: "#F87171", // red
-      cyberpunk: "#0EA5E9", // cyan
-      valentine: "#EC4899", // pink
-      halloween: "#F97316", // orange
-      garden: "#22C55E", // green
-      forest: "#22C55E", // green
-      aqua: "#06B6D4", // cyan
-      lofi: "#374151", // gray
-      pastel: "#FB7185", // light red
-      fantasy: "#8B5CF6", // violet
-      wireframe: "#374151", // gray
-      luxury: "#D4AA70", // gold
-      dracula: "#FF79C6", // pink
-      cmyk: "#0891B2", // cyan
-      autumn: "#D97706", // amber
-      acid: "#84CC16", // lime
-      lemonade: "#EAB308", // yellow
-      night: "#C084FC", // purple
-      coffee: "#A16207", // yellow-brown
-      winter: "#38BDF8", // sky blue
-    };
-    
-    setQrCodeStyles({
-      fgColor: themeColors[theme] || "#7B5CF0", // Default to purple if theme not found
-      logoOpacity: theme === "dark" ? 0.9 : 1
-    });
-  }, [theme]);
+  // QR code color is always tangerine now
   
   // Password validation criteria
   const passwordCriteria = [
@@ -445,7 +410,15 @@ const ProfilePage = () => {
   }, [authUser]);
 
   return (
-    <div className="h-screen pt-20">
+    <div className="h-screen pt-20 relative">
+      {/* Close Button */}
+      <button
+        aria-label="Close profile"
+        className="btn btn-ghost btn-sm btn-circle absolute top-2 right-2 z-20"
+        onClick={() => navigate(-1)}
+      >
+        <X size={18} />
+      </button>
       <div className="max-w-2xl mx-auto p-4 py-8">
         <div className="bg-base-300 rounded-xl p-6 space-y-8">
           <div className="text-center">

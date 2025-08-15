@@ -1,4 +1,3 @@
-import Navbar from "./components/Navbar";
 import ErrorBoundary from "./components/ErrorBoundary";
 import MobileRedirectScreen from "./components/MobileRedirectScreen";
 
@@ -16,24 +15,38 @@ import ReportThanksPage from "./pages/ReportThanksPage";
 
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuthStore } from "./store/useAuthStore";
-import { useThemeStore } from "./store/useThemeStore";
+import { useThemeStore, getThemeVariables } from "./store/useThemeStore";
 import { useChatStore } from "./store/useChatStore";
 import { useGroupStore } from "./store/useGroupStore";
+import { useAIStore } from "./store/useAIStore";
 import { useEffect, useState } from "react";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { HelmetProvider } from 'react-helmet-async';
 import { initializeEncryption } from "./utils/encryption";
 import { getGoogleClientId } from "./config/environment";
+import "./components/skeleton-styles.css";
 
 import { Loader } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 
 const App = () => {
   const { authUser, checkAuth, isCheckingAuth, onlineUsers } = useAuthStore();
-  const { theme, autoThemeEnabled, checkAutoTheme } = useThemeStore();
+  const { theme, autoThemeEnabled, checkAutoTheme, setTheme, themeVariables } = useThemeStore();
   const { subscribeToMessages, unsubscribeFromMessages, getUnreadCounts } = useChatStore();
   const { subscribeToGroupEvents, unsubscribeFromGroupEvents } = useGroupStore();
+  const { deselectAI } = useAIStore();
   const [isMobile, setIsMobile] = useState(false);
+  
+  // Initialize the theme on load
+  useEffect(() => {
+    // Don't override the existing theme choice, let the theme system handle it
+    // This ensures proper theme application based on user preferences or auto settings
+  }, []);
+  
+  // Make sure AI is deselected on app load
+  useEffect(() => {
+    deselectAI();
+  }, []);
 
   console.log({ onlineUsers });
 
@@ -124,6 +137,8 @@ const App = () => {
       subscribeToGroupEvents();
       // Fetch initial unread counts
       getUnreadCounts();
+      // Ensure AI is deselected when logging in
+      deselectAI();
     }
 
     return () => {
@@ -132,7 +147,7 @@ const App = () => {
         unsubscribeFromGroupEvents();
       }
     };
-  }, [authUser, subscribeToMessages, unsubscribeFromMessages, subscribeToGroupEvents, unsubscribeFromGroupEvents, getUnreadCounts]);
+  }, [authUser, subscribeToMessages, unsubscribeFromMessages, subscribeToGroupEvents, unsubscribeFromGroupEvents, getUnreadCounts, deselectAI]);
 
   // Set up automatic theme checking
   useEffect(() => {
@@ -166,9 +181,16 @@ const App = () => {
   return (
     <GoogleOAuthProvider clientId={getGoogleClientId()}>
       <HelmetProvider>
-        <div data-theme={theme}>
-          <Navbar />
-
+        <div 
+          data-theme={theme === "light" ? "light" : "dark"} 
+          style={{
+            // Apply CSS variables for theme colors
+            ...(themeVariables ? Object.entries(themeVariables).reduce((acc, [key, value]) => {
+              acc[`--color-${key}`] = value;
+              return acc;
+            }, {}) : {})
+          }}
+        >
           <Routes>
           <Route path="/" element={authUser ? <HomePage /> : <Navigate to="/login" />} />
           <Route path="/signup" element={!authUser ? <SignUpPage /> : <Navigate to="/" />} />
@@ -176,7 +198,7 @@ const App = () => {
           <Route path="/verify-otp" element={!authUser ? <OTPVerificationPage /> : <Navigate to="/" />} />
           <Route path="/forgot-password" element={!authUser ? <ForgotPasswordPage /> : <Navigate to="/" />} />
           <Route path="/reset-password" element={!authUser ? <ResetPasswordPage /> : <Navigate to="/" />} />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings" element={authUser ? <SettingsPage /> : <Navigate to="/login" />} />
           <Route path="/security" element={authUser ? <SecuritySettings /> : <Navigate to="/login" />} />
           <Route path="/profile" element={authUser ? <ProfilePage /> : <Navigate to="/login" />} />
           <Route path="/report-thanks" element={authUser ? <ReportThanksPage /> : <Navigate to="/login" />} />

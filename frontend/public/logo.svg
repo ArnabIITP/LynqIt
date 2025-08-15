@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="40" height="40" rx="12" fill="#7B5CF0" class="qr-fill"/>
-  <path d="M30 20C30 14.4772 25.5228 10 20 10C14.4772 10 10 14.4772 10 20C10 22.5366 10.9542 24.8545 12.5 26.6142V30L16.4571 28.0813C17.5427 28.3603 18.7003 28.5085 19.898 28.5085C25.4208 28.5085 30 24.1199 30 18.5971V20Z" fill="white"/>
-</svg> 
+<svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Compact L logo for avatar/favicon usage -->
+  <rect width="60" height="60" rx="12" fill="#F5FFFA"/>
+  <!-- L shape -->
+  <path d="M15 10C15 8.34315 16.3431 7 18 7H25C26.6569 7 28 8.34315 28 10V40C28 41.6569 26.6569 43 25 43H18C16.3431 43 15 41.6569 15 40V10Z" fill="#333333"/>
+  <path d="M15 35C15 33.3431 16.3431 32 18 32H43C44.6569 32 46 33.3431 46 35V40C46 41.6569 44.6569 43 43 43H18C16.3431 43 15 41.6569 15 40V35Z" fill="#333333"/>
+  
+  <!-- Orange accent corner -->
+  <path d="M28 32H40C41.6569 32 43 33.3431 43 35V43H28V32Z" fill="#FFA500"/>
+</svg>

@@ -1,0 +1,101 @@
+/* High-contrast address for share location widget in dark mode */
+.location-picker-address {
+  color: #374151;
+}
+[data-theme='dark'] .location-picker-address {
+  color: #fff !important;
+}
+/* High-contrast address text for dark mode in LocationMessage */
+.location-address {
+  color: #374151; /* gray-700 for light mode */
+}
+
+[data-theme='dark'] .location-address {
+  color: #e5e7eb !important; /* gray-200 for dark mode */
+}
+/* WhatsApp-style link color for both themes */
+
+/* Consistent light blue for links in both themes */
+.wa-link {
+  color: #4da6ff !important; /* Tailwind blue-400 */
+  text-decoration: underline;
+  cursor: pointer;
+  word-break: break-all;
+}
+
+.wa-link:visited {
+  color: #60a5fa !important; /* Tailwind blue-400/blue-500 for visited */
+}
+
+.wa-link:visited {
+  color: #005bb5;
+}
+
+.wa-group-join-link {
+  font-weight: 600;
+  background: rgba(0,132,255,0.08);
+  border-radius: 4px;
+  padding: 0 3px;
+}
+/* WhatsApp-style mention highlight for both themes */
+.wa-mention {
+  background: rgba(0, 132, 255, 0.12);
+  color: #0084ff;
+  font-weight: 500;
+  padding: 0 3px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+[data-theme='dark'] .wa-mention {
+  background: rgba(0, 132, 255, 0.18);
+  color: #4da6ff;
+}
+/* Chat bubble styles for better readability */
+.chat-bubble-custom {
+  font-size: 1rem;
+  line-height: 1.6;
+  word-break: break-word;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  border-radius: 18px;
+  padding: 0.6em 1.1em;
+  margin-bottom: 0.3em;
+  transition: all 0.3s ease;
+}
+
+/* Light mode bubbles */
+.own-message-bubble {
+  background: #e3f2fd;
+  color: #0d2340;
+  border: 1px solid #b6d6f6;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.07);
+}
+
+.other-message-bubble {
+  background: #fffefb;
+  color: #263238;
+  border: 1px solid #ececec;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+/* Enhanced dark mode bubbles */
+[data-theme='dark'] .own-message-bubble {
+  background: linear-gradient(145deg, #295d4a 0%, #2e7d5b 100%);
+  color: #f3f3f3;
+  border: 1px solid #3fa37a;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.22);
+}
+
+[data-theme='dark'] .other-message-bubble {
+  background: #2D2D30;
+  color: #e0e0e0;
+  border: 1px solid #3a3a3c;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Hover effects for dark mode chat bubbles */
+[data-theme='dark'] .own-message-bubble:hover,
+[data-theme='dark'] .other-message-bubble:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}

@@ -8,9 +8,35 @@ import MessageInput from "./MessageInput";
 import MessageSkeleton from "./skeletons/MessageSkeleton";
 import AIChatContainer from "./AIChatContainer";
 import { useAuthStore } from "../store/useAuthStore";
+import CustomLinkPreview from "./CustomLinkPreview";
 import { formatMessageTime, groupMessagesByDate, formatStatusTime } from "../utils/dateUtils";
 import DateSeparator from "./DateSeparator";
 import { X, FileText, Film, Smile, Check, Info, Trash2, MoreVertical, AlertCircle, AlertTriangle, RefreshCw, Edit, Hash, AtSign, Reply, Flag, Send } from "lucide-react";
+import { MapContainer, TileLayer, Marker } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import LocationMessage from "./LocationMessage";
+import PollEventBubble from "./PollEventBubble";
+import axios from "axios";
+import { axiosInstance } from "../lib/axios";
+  // Poll/Event voting/RSVP handlers with optimistic UI update (socket will sync authoritative state)
+  const handleVote = async (message, selection) => {
+    try {
+      const payload = Array.isArray(selection)
+        ? { optionIndexes: selection }
+        : { optionIndex: selection };
+
+      await axiosInstance.post(`/poll/${message._id}/vote`, payload);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "Failed to vote");
+    }
+  };
+  const handleRsvp = async (message, status) => {
+    try {
+      await axiosInstance.post(`/event/${message._id}/rsvp`, { status });
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "Failed to RSVP");
+    }
+  };
 import EmojiPicker from "emoji-picker-react";
 import EditMessageModal from "./EditMessageModal";
 import ForwardMessageModal from "./ForwardMessageModal";
@@ -18,6 +44,7 @@ import ReplyMessage from "./ReplyMessage";
 import ReportMessageButton from "./ReportMessageButton";
 import MessageStatusIndicator from "./MessageStatusIndicator";
 import toast from "react-hot-toast";
+import "./chat-bubbles.css";
 // Encryption imports removed - encryption disabled
 
 const ChatContainer = () => {
@@ -31,7 +58,9 @@ const ChatContainer = () => {
     connectionStatus,
     handleSocketReconnect,
     isDeletingMessage,
-    setReplyingTo
+    setReplyingTo,
+    markMessagesAsSeen,
+    markChatAsRead
   } = useChatStore();
 
   const {
@@ -39,7 +68,8 @@ const ChatContainer = () => {
     groupMessages,
     getGroupMessages,
     isGroupMessagesLoading,
-    sendGroupMessage
+    sendGroupMessage,
+    markGroupAsRead
   } = useGroupStore();
 
   // Decryption removed - all messages are plain text
@@ -79,6 +109,34 @@ const ChatContainer = () => {
       getMessages(selectedUser._id);
     }
   }, [selectedUser, getMessages]);
+
+  // Mark messages as seen and chat/group as read when messages are loaded and chat is open
+  useEffect(() => {
+    if (selectedUser && messages && messages.length > 0) {
+      // Direct chat
+      const unreadMessageIds = messages
+        .filter(m => m.status !== 'seen' && m.receiverId === authUser._id)
+        .map(m => m._id);
+      if (unreadMessageIds.length > 0) {
+        markMessagesAsSeen(unreadMessageIds);
+      }
+      markChatAsRead('direct', selectedUser._id);
+    } else if (selectedGroup && groupMessages && groupMessages.length > 0) {
+      // Group chat
+      const unreadGroupMessageIds = groupMessages
+        .filter(m => {
+          // Check group read receipts for this user
+          if (!m.groupReadReceipts) return false;
+          const receipt = m.groupReadReceipts.find(r => r.userId === authUser._id);
+          return receipt && receipt.status !== 'seen';
+        })
+        .map(m => m._id);
+      if (unreadGroupMessageIds.length > 0) {
+        markMessagesAsSeen(unreadGroupMessageIds);
+      }
+      if (markGroupAsRead) markGroupAsRead(selectedGroup._id);
+    }
+  }, [selectedUser, messages, selectedGroup, groupMessages, authUser, markMessagesAsSeen, markChatAsRead, markGroupAsRead]);
 
   useEffect(() => {
     if (selectedGroup) {
@@ -181,8 +239,35 @@ const ChatContainer = () => {
 
   // Encryption completely removed
 
-  const handleMediaClick = (url, type) => {
-    setPreviewMedia({ url, type });
+  // Helper function for downloading any file through backend proxy
+  const downloadFile = (url, fileName) => {
+    // Log attempt
+    console.log(`📄 Attempting to download: ${fileName || 'Document'} from ${url}`);
+    
+    // Create a server-side proxy endpoint for document download
+    const apiUrl = `/api/download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(fileName || 'document')}`;
+    
+    // Create an anchor element to trigger the download
+    const link = document.createElement('a');
+    link.href = apiUrl;
+    link.download = fileName || 'download';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    console.log(`📄 Download initiated through server proxy: ${apiUrl}`);
+  };
+  
+  const handleMediaClick = (url, type, fileName) => {
+    // For documents, attempt to download using our helper
+    if (type === 'document') {
+      downloadFile(url, fileName);
+      return;
+    }
+    
+    // For videos and images, show in preview modal
+    console.log(`🔍 Opening ${type} preview: ${fileName || type}`);
+    setPreviewMedia({ url, type, fileName });
   };
 
   const closePreview = () => {
@@ -272,15 +357,26 @@ const ChatContainer = () => {
 
   // hasUserReacted function removed as it's not used
 
-  // Check if message is deletable for everyone (within 24 hours)
+  // Check if message is deletable for everyone (within 24 hours from sent time)
   const canDeleteForEveryone = (message) => {
-    if (message.senderId !== authUser._id) return false;
+    const senderId = typeof message.senderId === 'object' ? (message.senderId?._id || message.senderId?.toString?.()) : message.senderId;
+    if (!authUser || senderId?.toString() !== authUser._id?.toString()) return false;
 
     const messageDate = new Date(message.createdAt);
     const now = new Date();
     const hoursDiff = (now - messageDate) / (1000 * 60 * 60);
+    return hoursDiff <= 24; // within 24 hours
+  };
 
-    return hoursDiff <= 24; // Can delete for everyone within 24 hours
+  const getDeleteForEveryoneTimeLeft = (message) => {
+    const messageDate = new Date(message.createdAt);
+    const now = new Date();
+    const msLeft = 24 * 60 * 60 * 1000 - (now - messageDate);
+    if (msLeft <= 0) return 'Expired';
+    const hours = Math.floor(msLeft / (1000 * 60 * 60));
+    const minutes = Math.floor((msLeft % (1000 * 60 * 60)) / (1000 * 60));
+    if (hours > 0) return `${hours}h ${minutes}m left`;
+    return `${minutes}m left`;
   };
 
   // Check if message is editable (within 15 minutes)
@@ -383,13 +479,11 @@ const ChatContainer = () => {
         inline: 'nearest'
       });
 
-      // Add a temporary highlight effect
-      messageElement.classList.add('bg-primary/20', 'transition-colors', 'duration-1000');
-
-      // Remove highlight after animation
+      // Add a temporary highlight effect (stronger for mention jumps)
+      messageElement.classList.add('ring-4', 'ring-error', 'bg-error/20', 'transition-all', 'duration-700');
       setTimeout(() => {
-        messageElement.classList.remove('bg-primary/20', 'transition-colors', 'duration-1000');
-      }, 2000);
+        messageElement.classList.remove('ring-4', 'ring-error', 'bg-error/20', 'transition-all', 'duration-700');
+      }, 1800);
 
       console.log('✅ Scrolled to message:', messageId);
     } else {
@@ -412,34 +506,61 @@ const ChatContainer = () => {
   const renderMessageText = (message) => {
     if (!message.text) return null;
 
-    // All messages are plain text now
-    const displayText = message.text;
+    let text = message.text;
 
-    // If it's a group message with mentions, highlight them
+    // Highlight mentions (WhatsApp-style blue)
     if (isGroupChat && message.mentions && message.mentions.length > 0) {
-      let text = displayText;
-      
-      // Get sender info for determining if this is the user's message
-      const isMyMessage = message.senderId === authUser._id || message.senderId._id === authUser._id;
-
-      // Replace mentions with highlighted spans - different styling based on if it's the user's message or not
       message.mentions.forEach(mention => {
         const mentionRegex = new RegExp(`@${mention.username}`, 'gi');
-        const mentionStyle = isMyMessage 
-          ? `<span class="bg-primary-content/20 text-primary-content font-medium px-1 rounded">@${mention.username}</span>`
-          : `<span class="bg-primary/20 text-primary font-medium px-1 rounded">@${mention.username}</span>`;
+        const mentionStyle = `<span class=\"wa-mention\">@${mention.username}</span>`;
         text = text.replace(mentionRegex, mentionStyle);
       });
-
-      return (
-        <div
-          className="break-words"
-          dangerouslySetInnerHTML={{ __html: text }}
-        />
-      );
     }
 
-    return <div className="break-words font-normal">{displayText}</div>;
+    // Detect and replace URLs with clickable links
+    // Group join link pattern: e.g. https://lynqit.com/join/group/abc123
+    const groupJoinRegex = /https?:\/\/(lynqit\.com|localhost:\d+|127\.0\.0\.1:\d+)\/join\/group\/([a-zA-Z0-9_-]+)/g;
+    const urlRegex = /((https?:\/\/)?([\w-]+\.)+[\w-]+(\/[\w\-._~:/?#[\]@!$&'()*+,;=]*)?)/gi;
+
+    // Replace group join links with a special clickable span
+    text = text.replace(groupJoinRegex, (match, domain, groupId) => {
+      return `<span class=\"wa-link wa-group-join-link\" data-group-id=\"${groupId}\">${match}</span>`;
+    });
+
+    // Replace other URLs with anchor tags (skip already replaced group join links)
+    text = text.replace(urlRegex, (url) => {
+      // If already replaced as group join, skip
+      if (url.includes('wa-group-join-link')) return url;
+      let href = url;
+      if (!href.startsWith('http')) href = 'https://' + href;
+      return `<a href=\"${href}\" class=\"wa-link\" target=\"_blank\" rel=\"noopener noreferrer\">${url}</a>`;
+    });
+
+    // Handler for group join link click
+    const handleGroupJoinClick = (e) => {
+      const target = e.target;
+      if (target.classList.contains('wa-group-join-link')) {
+        e.preventDefault();
+        const groupId = target.getAttribute('data-group-id');
+        // Show group join popup/modal (implement your modal logic here)
+        toast((t) => (
+          <div>
+            <b>Join Group</b>
+            <div>Would you like to join group <span className="font-mono">{groupId}</span>?</div>
+            <button className="btn btn-primary btn-sm mt-2" onClick={() => { toast.dismiss(t.id); /* trigger join logic here */ }}>Join</button>
+            <button className="btn btn-ghost btn-sm mt-2 ml-2" onClick={() => toast.dismiss(t.id)}>Cancel</button>
+          </div>
+        ), { duration: 6000 });
+      }
+    };
+
+    return (
+      <div
+        className="break-words"
+        dangerouslySetInnerHTML={{ __html: text }}
+        onClick={handleGroupJoinClick}
+      />
+    );
   };
 
   const renderMediaContent = (message) => {
@@ -449,38 +570,328 @@ const ChatContainer = () => {
     const isMyMessage = message.senderId === authUser._id || message.senderId._id === authUser._id;
     const bgClass = isMyMessage ? 'bg-primary-content/10' : 'bg-base-300';
     const textClass = isMyMessage ? 'text-primary-content' : 'text-base-content';
+    
+    // Check if message is in sending state
+    const isSending = message.status === 'sending';
 
-    switch (message.mediaType) {
-      case 'video':
+    // Function to render caption if exists
+    const renderCaption = () => {
+      if (!message.caption) return null;
+      return (
+        <div className={`text-sm italic mt-1 ${textClass}`}>
+          {message.caption}
+        </div>
+      );
+    };
+
+    // Get file size in readable format
+    const formatFileSize = (bytes) => {
+      if (!bytes) return '';
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(1024));
+      return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`;
+    };
+
+    // Format seconds to mm:ss
+    const formatDuration = (seconds) => {
+      if (!seconds && seconds !== 0) return '';
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      return `${m}:${s.toString().padStart(2, '0')}`;
+    };
+    
+    // Log and potentially fix mediaType issues
+    console.log('🖼️ Rendering media content:', { 
+      mediaType: message.mediaType, 
+      url: message.image?.substring(0, 50) + '...',
+      fileName: message.fileName
+    });
+    
+    // Check if URL suggests it's a video but mediaType doesn't match
+    let effectiveMediaType = message.mediaType;
+    if (message.image) {
+      const videoExtensions = ['.mp4', '.mov', '.webm', '.avi', '.mkv', '.m4v'];
+      const isVideoByExtension = videoExtensions.some(ext => 
+        message.image.toLowerCase().includes(ext)
+      );
+      
+      if (isVideoByExtension && effectiveMediaType !== 'video') {
+        console.log('🎬 URL contains video extension but mediaType is not video, correcting');
+        effectiveMediaType = 'video';
+      }
+    }
+
+    // Custom audio bubble component (for 'audio' and 'music')
+    const AudioMessageBubble = ({ message, isMyMessage }) => {
+      const [isPlaying, setIsPlaying] = useState(false);
+      const [duration, setDuration] = useState(null);
+      const [currentTime, setCurrentTime] = useState(0);
+      const [playbackRate, setPlaybackRate] = useState(1);
+      const audioRef = useRef(null);
+
+      const isSending = message.status === 'sending';
+      const isUploading = (message.uploadProgress !== undefined && message.uploadProgress < 100) || isSending;
+      const progress = message.uploadProgress || (isSending ? 0 : 100);
+
+      const handleTogglePlay = (e) => {
+        e.stopPropagation();
+        const audio = audioRef.current;
+        if (!audio) return;
+        if (audio.paused) {
+          audio.play();
+        } else {
+          audio.pause();
+        }
+      };
+
+      const onSeek = (e) => {
+        const audio = audioRef.current;
+        if (!audio || !duration) return;
+        const value = Number(e.target.value);
+        audio.currentTime = value;
+        setCurrentTime(value);
+      };
+
+      const cycleSpeed = (e) => {
+        e.stopPropagation();
+        const next = playbackRate === 1 ? 1.5 : playbackRate === 1.5 ? 2 : 1;
+        setPlaybackRate(next);
+        if (audioRef.current) audioRef.current.playbackRate = next;
+      };
+
+      return (
+        <div className="flex flex-col">
+          <div className={`relative rounded-md mb-1 ${bgClass} p-2 flex items-center gap-3`}>
+            {/* Left: uploading percent or play/pause */}
+            {isUploading ? (
+              <div className="relative h-9 w-9 rounded-full bg-gray-200 flex items-center justify-center border border-gray-300">
+                <span className="text-[10px] font-semibold text-gray-700">{progress}%</span>
+              </div>
+            ) : (
+              <button
+                onClick={handleTogglePlay}
+                className={`h-9 w-9 rounded-full flex items-center justify-center transition-colors ${isMyMessage ? 'bg-primary/90 text-white hover:bg-primary' : 'bg-base-200 text-base-content hover:bg-base-300'}`}
+                title={isPlaying ? 'Pause' : 'Play'}
+              >
+                {isPlaying ? (
+                  // Pause icon
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+                ) : (
+                  // Play icon
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                )}
+              </button>
+            )}
+
+            {/* Middle: filename + meta + progress bar */}
+            <div className="flex flex-col flex-1 min-w-0">
+              <span className={`text-sm font-medium truncate ${textClass}`}>
+                {message.fileName || 'Audio'}
+              </span>
+              <span className={`text-xs ${textClass} opacity-70`}>
+                {duration ? `${formatDuration(duration)} • ` : ''}{message.fileSize ? formatFileSize(message.fileSize) : ''}
+              </span>
+              {isUploading && (
+                <div className="w-full h-1 bg-gray-200 rounded mt-1">
+                  <div className="h-1 bg-tangerine rounded" style={{ width: `${progress}%` }} />
+                </div>
+              )}
+            </div>
+
+            {/* Hidden audio element */}
+            <audio
+              ref={audioRef}
+              src={message.image}
+              preload="metadata"
+              onLoadedMetadata={(e) => {
+                setDuration(e.currentTarget.duration);
+                setCurrentTime(0);
+                if (audioRef.current) audioRef.current.playbackRate = playbackRate;
+              }}
+              onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onEnded={() => { setIsPlaying(false); setCurrentTime(0); }}
+              className="hidden"
+            />
+          </div>
+          {/* Seek and speed controls */}
+          {!isUploading && (
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`text-[10px] ${textClass} opacity-70 w-8 text-right`}>{formatDuration(currentTime)}</span>
+              <input
+                type="range"
+                min={0}
+                max={duration || 0}
+                step={0.1}
+                value={Math.min(currentTime, duration || 0)}
+                onChange={onSeek}
+                className="range range-xs flex-1"
+              />
+              <span className={`text-[10px] ${textClass} opacity-70 w-8`}>{formatDuration(duration || 0)}</span>
+              <button onClick={cycleSpeed} className={`px-2 py-0.5 rounded text-xs border ${isMyMessage ? 'border-primary/40' : 'border-base-300'}`} title="Playback speed">
+                {playbackRate}x
+              </button>
+            </div>
+          )}
+          {renderCaption()}
+        </div>
+      );
+    };
+
+    switch (effectiveMediaType) {
+      case 'video': {
+        // Show upload progress if available (optimistic UI) or message is sending
+        const isUploading = (message.uploadProgress !== undefined && message.uploadProgress < 100) || isSending;
+        const progress = message.uploadProgress || (isSending ? 0 : 100);
         return (
-          <div
-            className={`relative rounded-md mb-2 cursor-pointer hover:opacity-90 transition-opacity ${bgClass} p-2 flex items-center gap-2`}
-            onClick={() => handleMediaClick(message.image, 'video')}
-          >
-            <Film size={20} className={textClass} />
-            <span className={`text-sm ${textClass}`}>Video attachment</span>
+          <div className="flex flex-col">
+            <div
+              className={`relative rounded-md mb-1 cursor-pointer hover:opacity-90 transition-opacity ${bgClass} p-2 flex items-center gap-2`}
+              onClick={() => handleMediaClick(message.image, 'video', message.fileName)}
+            >
+              {/* Left: icon or spinner when uploading */}
+
+              {/* Video thumbnail or spinner */}
+              {isUploading ? (
+                <div className="relative w-14 h-10 bg-gray-100 rounded flex items-center justify-center border border-gray-200 overflow-hidden">
+                  <svg className="h-6 w-6 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  <div className="absolute bottom-0 left-0 w-full h-1 bg-gray-200">
+                    <div className="h-full bg-tangerine" style={{ width: `${progress}%` }}></div>
+                  </div>
+                  <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
+                    <span className="text-xs font-medium text-white">{progress}%</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="relative">
+                  <video
+                    src={message.image}
+                    className="h-10 w-14 object-cover rounded shadow border border-gray-300 bg-black"
+                    style={{ minWidth: 56, minHeight: 40 }}
+                    preload="metadata"
+                    onClick={e => { e.stopPropagation(); handleMediaClick(message.image, 'video', message.fileName); }}
+                    tabIndex={-1}
+                    poster=""
+                    muted
+                  />
+                  {/* Play button overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="h-5 w-5 bg-black/50 rounded-full flex items-center justify-center">
+                      <svg viewBox="0 0 24 24" className="h-3 w-3 text-white" fill="currentColor">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Middle: filename + size + progress bar */}
+              <div className="flex flex-col flex-1">
+                <span className={`text-sm font-medium ${textClass}`}>
+                  {message.fileName || 'Video'}
+                </span>
+                {message.fileSize && (
+                  <span className={`text-xs ${textClass} opacity-70`}>
+                    {formatFileSize(message.fileSize)}
+                  </span>
+                )}
+                {isUploading && (
+                  <div className="w-full h-1 bg-gray-200 rounded mt-1">
+                    <div className="h-1 bg-tangerine rounded" style={{ width: `${progress}%` }} />
+                  </div>
+                )}
+              </div>
+
+              {/* Right: download button (disabled while uploading) */}
+              {!isUploading && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); downloadFile(message.image, message.fileName || 'Video'); }}
+                  className="relative flex items-center justify-center group"
+                  title="Download video"
+                >
+                  <svg className="h-6 w-6 text-gray-400 group-hover:text-tangerine transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            {renderCaption()}
           </div>
         );
+      }
       case 'document':
+        // Show upload progress if available (optimistic UI)
+        const isUploading = message.uploadProgress !== undefined && message.uploadProgress < 100;
+        const progress = message.uploadProgress || 0;
         return (
-          <div
-            className={`relative rounded-md mb-2 cursor-pointer hover:opacity-90 transition-opacity ${bgClass} p-2 flex items-center gap-2`}
-            onClick={() => handleMediaClick(message.image, 'document')}
-          >
-            <FileText size={20} className={textClass} />
-            <span className={`text-sm ${textClass}`}>Document attachment</span>
+          <div className="flex flex-col">
+            <div
+              className={`relative rounded-md mb-1 transition-opacity ${bgClass} p-2 flex items-center gap-2`}
+            >
+              {/* Animated icon: show progress spinner if uploading, else download icon */}
+              {isUploading ? (
+                <div className="relative flex items-center justify-center">
+                  <svg className="animate-spin h-6 w-6 text-gray-400" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                  <span className="absolute text-xs font-bold text-gray-700">{progress}%</span>
+                </div>
+              ) : (
+                <button
+                  className="relative flex items-center justify-center group"
+                  title="Download file"
+                  onClick={() => downloadFile(message.image, message.fileName)}
+                >
+                  <svg className="h-6 w-6 text-gray-400 group-hover:text-tangerine transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
+                  </svg>
+                </button>
+              )}
+              <div className="flex flex-col flex-1">
+                <span className={`text-sm font-medium ${textClass}`}>
+                  {message.fileName || 'Document'}
+                </span>
+                {message.fileSize && (
+                  <span className={`text-xs ${textClass} opacity-70`}>
+                    {formatFileSize(message.fileSize)}
+                  </span>
+                )}
+                {/* Show progress bar if uploading */}
+                {isUploading && (
+                  <div className="w-full h-1 bg-gray-200 rounded mt-1">
+                    <div
+                      className="h-1 bg-tangerine rounded"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+            {renderCaption()}
           </div>
+        );
+      case 'audio':
+      case 'music':
+        return (
+          <AudioMessageBubble message={message} isMyMessage={isMyMessage} />
         );
       case 'gif':
       case 'image':
       default:
         return (
-          <img
-            src={message.image}
-            alt="Attachment"
-            className="sm:max-w-[200px] rounded-md mb-2 cursor-pointer hover:opacity-90 transition-opacity border border-base-300"
-            onClick={() => handleMediaClick(message.image, message.mediaType || 'image')}
-          />
+          <div className="flex flex-col">
+            <img
+              src={message.image}
+              alt={message.caption || "Attachment"}
+              className="sm:max-w-[200px] rounded-md mb-1 cursor-pointer hover:opacity-90 transition-opacity border border-base-300"
+              onClick={() => handleMediaClick(message.image, message.mediaType || 'image', message.fileName)}
+            />
+            {renderCaption()}
+          </div>
         );
     }
   };
@@ -589,13 +1000,13 @@ const ChatContainer = () => {
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="flex-1 flex flex-col overflow-hidden bg-base-100">
       <ChatHeader />
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1.5">
         {renderConnectionStatus()}
         {groupMessagesByDate(currentMessages).map((group, groupIndex) => (
-          <div key={`group-${groupIndex}`}>
+          <div key={`group-${groupIndex}`}> 
             {/* Date Separator */}
             <DateSeparator date={group.date} />
 
@@ -617,7 +1028,7 @@ const ChatContainer = () => {
                 className={`chat ${isMyMessage ? "chat-end" : "chat-start"}`}
                 ref={message === messages[messages.length - 1] ? messageEndRef : null}
           >
-                <div className="chat-bubble bg-base-300 text-base-content/60 italic">
+                <div className="chat-bubble bg-base-200 text-neutral-content italic shadow-message">
                   This message was deleted
                 </div>
               </div>
@@ -630,6 +1041,9 @@ const ChatContainer = () => {
               message.deletedBy === authUser._id) {
             return null;
           }
+
+          // Check if the current user is mentioned in this message (for group chats)
+          const isMentioned = isGroupChat && message.mentions && message.mentions.some(m => m._id === authUser._id || m.username === authUser.username);
 
           return (
             <div
@@ -660,71 +1074,14 @@ const ChatContainer = () => {
                 <time className="text-xs text-base-content/70 ml-1" key={`time-${timeFormatKey}`}>
                   {formatMessageTime(message.createdAt)}
                 </time>
-                <div className="relative ml-1">                  <button
-                    className="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100"
-                    onClick={(e) => toggleMessageOptions(message._id, e)}
-                    data-message-menu-toggle="true"
-                    aria-label="Message options"
-                  >
-                    <MoreVertical size={14} />
-                  </button>
-                    {/* Message options dropdown */}
-                  {showMessageOptions === message._id && (
-                    <div
-                      ref={moreOptionsRef}
-                      className={`absolute top-full ${isMyMessage ? 'right-0' : 'left-0'} mt-1 bg-base-200 rounded-lg shadow-lg z-50 overflow-hidden w-40`}
-                      style={{
-                        maxHeight: '200px',
-                        overflowY: 'auto',
-                        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.3)'
-                      }}
-                    >
-                      <ul className="menu menu-sm p-0">
-                        <li>
-                          <button onClick={() => handleReplyToMessage(message)}>
-                            <Reply size={14} />
-                            <span>Reply</span>
-                          </button>
-                        </li>
-
-                        <li>
-                          <button onClick={() => handleForwardMessage(message)}>
-                            <Send size={14} />
-                            <span>Forward</span>
-                          </button>
-                        </li>
-
-                        <li>
-                          <button onClick={() => handleMessageInfo(message)}>
-                            <Info size={14} />
-                            <span>Info</span>
-                          </button>
-                        </li>
-
-                        {isMyMessage && canEditMessage(message) && (
-                          <li>
-                            <button onClick={() => handleEditMessage(message)}>
-                              <Edit size={14} />
-                              <span>Edit</span>
-                            </button>
-                          </li>
-                        )}                        <li className="bg-error/10 hover:bg-error/20">
-                          <button
-                            onClick={() => openDeleteModal(message)}
-                            className="text-error font-bold flex items-center gap-2"
-                          >
-                            <Trash2 size={16} className="flex-shrink-0" />
-                            <span>Delete Message</span>
-                          </button>
-                        </li>
-                      </ul>
-                    </div>
-                  )}
-                </div>
+                {/* Removed inline 3-dot menu; use right-click context menu instead */}
               </div>
               <div
-                className={`chat-bubble flex flex-col group relative ${isMyMessage ? 'bg-primary text-primary-content' : 'bg-base-200 text-base-content'}`}
+                className={`chat-bubble-custom flex flex-col group relative ${isMyMessage
+                  ? 'own-message-bubble'
+                  : 'other-message-bubble'} rounded-lg ${isMentioned ? 'ring-2 ring-error/70 bg-error/10 animate-pulse-short' : ''}`}
                 onContextMenu={(e) => handleRightClick(e, message)}
+                id={isMentioned ? `mention-${message._id}` : undefined}
               >
                 {/* Show replied message if this is a reply */}
                 {message.replyTo && (
@@ -746,21 +1103,69 @@ const ChatContainer = () => {
                   </div>
                 )}
 
-                {message.image && renderMediaContent(message)}
-                {message.text && (
-                  <div>
-                    {renderMessageText(message)}
-                    {message.isEdited && (
-                      <span className="text-xs opacity-60 ml-1">(edited)</span>
-                    )}
-                  </div>
+
+                {/* Poll/Event bubble (use mediaType field from backend) */}
+                {message.mediaType === 'poll' && message.poll && (
+                  <PollEventBubble
+                    message={message}
+                    authUser={authUser}
+                    onVote={sel => handleVote(message, sel)}
+                  />
+                )}
+                {message.mediaType === 'event' && message.event && (
+                  <PollEventBubble
+                    message={message}
+                    authUser={authUser}
+                    onRsvp={status => handleRsvp(message, status)}
+                  />
                 )}
 
-                {/* Status indicator for my messages */}
-                <MessageStatusIndicator
-                  message={message}
-                  isOwnMessage={isMyMessage}
-                />
+
+                {/* Location message card */}
+                {message.type === "location" && message.lat && message.lng ? (
+                  <>
+                    <LocationMessage
+                      lat={message.lat}
+                      lng={message.lng}
+                      address={message.address}
+                      time={formatMessageTime(message.createdAt)}
+                      status={message.status || "sent"}
+                    />
+                  </>
+                ) : (
+                  // Standard message content
+                  message.mediaType !== 'poll' && message.mediaType !== 'event' && (
+                    <>
+                      {message.image && renderMediaContent(message)}
+                      {message.text && (
+                        <div>
+                          {renderMessageText(message)}
+                          {/* Link Preview: show for first URL in message */}
+                          {(() => {
+                            // Extract first URL from message text
+                            const urlRegex = /https?:\/\/[\w.-]+(?:\.[\w\.-]+)+(?:[\w\-\._~:/?#[\]@!$&'()*+,;=]*)?/gi;
+                            const urls = message.text.match(urlRegex);
+                            if (urls && urls.length > 0) {
+                              return <CustomLinkPreview url={urls[0]} />;
+                            }
+                            return null;
+                          })()}
+                          {message.isEdited && (
+                            <span className="text-xs opacity-60 ml-1">(edited)</span>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )
+                )}
+
+                {/* Status indicator for my messages (skip for location messages, handled inside LocationMessage) */}
+                {!(message.type === "location" && message.lat && message.lng) && (
+                  <MessageStatusIndicator
+                    message={message}
+                    isOwnMessage={isMyMessage}
+                  />
+                )}
 
                 {/* Quick reaction button - position based on message alignment */}
                 <div
@@ -835,14 +1240,8 @@ const ChatContainer = () => {
                 className="max-h-[90vh] max-w-full rounded-lg"
                 onClick={(e) => e.stopPropagation()}
               />
-            ) : previewMedia.type === 'document' ? (
-              <iframe
-                src={previewMedia.url}
-                className="w-full h-[90vh] rounded-lg bg-white"
-                onClick={(e) => e.stopPropagation()}
-              />
-            ) : (
-                <img
+            ) : previewMedia.type === 'document' ? null : (
+              <img
                 src={previewMedia.url}
                 alt="Preview"
                 className="max-h-[90vh] max-w-full object-contain rounded-lg"
@@ -933,7 +1332,7 @@ const ChatContainer = () => {
               <h3 className="text-lg font-medium mb-1">Delete message?</h3>
               <p className="text-sm text-base-content/70">
                 {canDeleteForEveryone(selectedMessage)
-                  ? "You can delete for everyone or just for yourself."
+                  ? `You can delete for everyone or just for yourself. (${getDeleteForEveryoneTimeLeft(selectedMessage)})`
                   : "This message can only be deleted for yourself."}
               </p>
             </div>
@@ -1011,6 +1410,22 @@ const ChatContainer = () => {
           }}
         >
           <ul className="menu menu-sm p-0">
+                {selectedMessage.text && (
+                  <li>
+                    <button onClick={() => {
+                      try {
+                        navigator.clipboard.writeText(selectedMessage.text);
+                        setShowContextMenu(null);
+                        toast.success('Copied');
+                      } catch (e) {
+                        toast.error('Failed to copy');
+                      }
+                    }}>
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8H10a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2v-6a2 2 0 00-2-2z" /></svg>
+                      <span>Copy</span>
+                    </button>
+                  </li>
+                )}
             <li>
               <button onClick={() => handleReplyToMessage(selectedMessage)}>
                 <Reply size={14} />
@@ -1031,6 +1446,15 @@ const ChatContainer = () => {
                 <span>Info</span>
               </button>
             </li>
+
+                {(selectedMessage.image && ['image','video','audio','music','document','gif'].includes(selectedMessage.mediaType)) && (
+                  <li>
+                    <button onClick={() => downloadFile(selectedMessage.image, selectedMessage.fileName || 'download')}>
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 10l5 5 5-5M12 15V4" /></svg>
+                      <span>Download</span>
+                    </button>
+                  </li>
+                )}
 
             {selectedMessage.senderId === authUser._id && canEditMessage(selectedMessage) && (
               <li>

@@ -9,7 +9,7 @@ const statusSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["text", "image"],
+      enum: ["text", "image", "video"],
       required: true,
     },
     // For text status
@@ -50,6 +50,25 @@ const statusSchema = new mongoose.Schema(
       required: function() {
         return this.type === "image";
       }
+    },
+    // For video status
+    video: {
+      type: String, // Cloudinary URL
+      required: function() {
+        return this.type === "video";
+      }
+    },
+    videoDuration: {
+      type: Number, // seconds
+      default: 0
+    },
+    trimStart: {
+      type: Number,
+      default: 0
+    },
+    trimEnd: {
+      type: Number,
+      default: 0
     },
     caption: {
       type: String,

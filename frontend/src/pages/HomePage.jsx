@@ -12,10 +12,10 @@ const HomePage = () => {
   const { isSelected: isAISelected } = useAIStore();
 
   return (
-    <div className="h-screen bg-base-200">
-      <div className="flex items-center justify-center pt-20 px-4">
-        <div className="bg-base-100 rounded-lg shadow-cl w-full max-w-6xl h-[calc(100vh-8rem)]">
-          <div className="flex h-full rounded-lg overflow-hidden resize-none">
+    <div className="h-screen bg-base-100">
+      <div className="flex h-full">
+        <div className="bg-base-100 w-full h-full border border-base-200/50">
+          <div className="flex h-full overflow-hidden">
             <Sidebar />
 
             {!selectedUser && !selectedGroup && !isAISelected ? <NoChatSelected /> : <ChatContainer />}

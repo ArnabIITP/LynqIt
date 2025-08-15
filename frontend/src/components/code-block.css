@@ -12,8 +12,10 @@
   margin: 0;
 }
 
-.dark .code-block {
-  background-color: #282c34;
+[data-theme='dark'] .code-block {
+  background-color: #1E1E2E;
+  border: 1px solid #313244;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 .code-block pre {
@@ -31,9 +33,10 @@
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
-.dark .code-header {
-  background-color: #21252b;
-  border-color: rgba(255, 255, 255, 0.1);
+[data-theme='dark'] .code-header {
+  background-color: #181825;
+  border-color: rgba(166, 173, 200, 0.2);
+  color: #CDD6F4;
 }
 
 .code-language {
@@ -42,8 +45,9 @@
   color: #666;
 }
 
-.dark .code-language {
-  color: #aaa;
+[data-theme='dark'] .code-language {
+  color: #A6ADC8;
+  font-weight: 600;
 }
 
 .copy-button {
@@ -64,13 +68,15 @@
   color: #333;
 }
 
-.dark .copy-button {
-  color: #aaa;
+[data-theme='dark'] .copy-button {
+  color: #A6ADC8;
+  transition: all 0.2s ease;
 }
 
-.dark .copy-button:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: #eee;
+[data-theme='dark'] .copy-button:hover {
+  background-color: rgba(166, 173, 200, 0.2);
+  color: #CDD6F4;
+  transform: translateY(-1px);
 }
 
 .copy-button svg {
@@ -81,4 +87,59 @@
 .copied-text {
   font-size: 0.75rem;
   color: #10B981;
+}
+
+[data-theme='dark'] .copied-text {
+  color: #A6E3A1;
+  text-shadow: 0 0 8px rgba(166, 227, 161, 0.6);
+}
+
+/* Enhanced code syntax highlighting for dark theme */
+[data-theme='dark'] code .token.comment,
+[data-theme='dark'] code .token.prolog,
+[data-theme='dark'] code .token.doctype,
+[data-theme='dark'] code .token.cdata {
+  color: #6C7086;
+}
+
+[data-theme='dark'] code .token.punctuation {
+  color: #CDD6F4;
+}
+
+[data-theme='dark'] code .token.property,
+[data-theme='dark'] code .token.tag,
+[data-theme='dark'] code .token.boolean,
+[data-theme='dark'] code .token.number,
+[data-theme='dark'] code .token.constant,
+[data-theme='dark'] code .token.symbol {
+  color: #F5C2E7;
+}
+
+[data-theme='dark'] code .token.selector,
+[data-theme='dark'] code .token.attr-name,
+[data-theme='dark'] code .token.string,
+[data-theme='dark'] code .token.char,
+[data-theme='dark'] code .token.builtin {
+  color: #A6E3A1;
+}
+
+[data-theme='dark'] code .token.operator,
+[data-theme='dark'] code .token.entity,
+[data-theme='dark'] code .token.url,
+[data-theme='dark'] code .language-css .token.string,
+[data-theme='dark'] code .style .token.string {
+  color: #F2CDCD;
+}
+
+[data-theme='dark'] code .token.keyword {
+  color: #89B4FA;
+}
+
+[data-theme='dark'] code .token.function {
+  color: #74C7EC;
+}
+
+[data-theme='dark'] code .token.important,
+[data-theme='dark'] code .token.variable {
+  color: #FAB387;
 }

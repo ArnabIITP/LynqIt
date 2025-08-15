@@ -1,3 +1,41 @@
+// Report a group
+import Report from "../models/report.model.js";
+
+export const reportGroup = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const { reason, description } = req.body;
+    const reportedBy = req.user._id;
+
+    if (!reason) {
+      return res.status(400).json({ error: "Reason is required" });
+    }
+
+    const group = await Group.findById(groupId);
+    if (!group) {
+      return res.status(404).json({ error: "Group not found" });
+    }
+
+    // Create the report
+    const report = new Report({
+      reportedBy,
+      reportedUser: group.createdBy, // For reference, the group creator
+      reportType: 'group',
+      groupId: groupId,
+      reason,
+      description: description || "",
+      status: "pending"
+    });
+    await report.save();
+
+    // Optionally, send email notification to admin (reuse user report logic if needed)
+
+    res.status(201).json({ message: "Group reported successfully" });
+  } catch (error) {
+    console.error("Error reporting group:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
 import Group from "../models/group.model.js";
 import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
@@ -756,7 +794,21 @@ export const deleteGroup = async (req, res) => {
             }
         });
 
-        // Delete all messages in the group
+        // Delete all messages in the group and cleanup associated media on Cloudinary
+        const groupMessages = await Message.find({ groupId: group._id, image: { $exists: true, $ne: null } });
+        for (const msg of groupMessages) {
+            try {
+                if (msg.image) {
+                    const publicId = extractCloudinaryPublicId(msg.image);
+                    if (publicId) {
+                        await cloudinary.uploader.destroy(publicId);
+                        console.log(`[Group Delete] Deleted media from Cloudinary: ${publicId}`);
+                    }
+                }
+            } catch (err) {
+                console.error("[Group Delete] Error deleting media from Cloudinary:", err.message);
+            }
+        }
         await Message.deleteMany({ groupId: group._id });
 
         // Delete the group
@@ -768,6 +820,21 @@ export const deleteGroup = async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 };
+
+// Helper to extract Cloudinary public ID (duplicated for controller scope)
+function extractCloudinaryPublicId(url) {
+    try {
+        if (!url) return null;
+        const regex = /\/v\d+\/(?:.*\/)?(.+?)\./;
+        const match = url.match(regex);
+        if (match && match[1]) return match[1];
+        const parts = url.split('/');
+        const filename = parts[parts.length - 1];
+        return filename.split('.')[0];
+    } catch (e) {
+        return null;
+    }
+}
 
 // Rotate group encryption key
 export const rotateGroupKey = async (req, res) => {

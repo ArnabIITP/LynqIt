@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useAuthStore } from '../store/useAuthStore';
 import { useAIStore } from '../store/useAIStore';
 import { formatTimeAgo } from '../utils/timeUtils';
 import { FiPaperclip, FiSend, FiX } from 'react-icons/fi';
-import { Lightbulb } from 'lucide-react';
+
 import MarkdownIt from 'markdown-it';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
@@ -101,10 +102,20 @@ const AIChatContainer = () => {
     selectedHistoryId,
     getConversationTitle
   } = useAIStore();
+  const { authUser } = useAuthStore();
+
+  // Filter out any legacy processing placeholders just in case
+  const cleanedMessages = useMemo(
+    () => (messages || []).filter(m => {
+      const c = typeof m?.content === 'string' ? m.content.toLowerCase() : '';
+      return !m?.isProcessing && !c.includes('processing your request');
+    }),
+    [messages]
+  );
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [cleanedMessages]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -168,53 +179,67 @@ const AIChatContainer = () => {
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="bg-base-100 p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-        <div className="flex items-center space-x-2">
-          <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
-            <span className="text-white text-lg font-bold">L</span>
+      <div className="bg-base-100 p-2 border-b border-base-200 flex justify-between items-center shadow-sidebar">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
+            <img src="/images/ai-logo.svg" alt="LynqIt AI" className="w-6 h-6" />
           </div>
           <div>
             {selectedHistoryId ? (
               <>
-                <h2 className="font-medium text-base-content">
+                <h2 className="font-medium text-text">
                   {conversationHistory.find(c => c.id === selectedHistoryId)?.title || 'LynqIt AI'}
                 </h2>
-                <p className="text-xs text-base-content/70">
+                <p className="text-xs text-medium-gray">
                   {new Date(conversationHistory.find(c => c.id === selectedHistoryId)?.timestamp).toLocaleString()}
                 </p>
               </>
             ) : (
               <>
-                <h2 className="font-medium text-base-content">
+                <h2 className="font-medium text-dark-gray">
                   {messages.length > 0 ? getConversationTitle(messages) : 'LynqIt AI'}
                 </h2>
-                <p className="text-sm text-base-content/70">
+                <p className="text-sm text-medium-gray">
                   Ask anything or upload files
                 </p>
               </>
             )}
           </div>
         </div>
+        {/* Close (cross) button */}
+        <button
+          className="ml-2 p-2 rounded-full hover:bg-base-200 text-base-content/70 hover:text-error transition-colors"
+          title="Close AI Assistant"
+          aria-label="Close AI Assistant"
+          onClick={() => {
+            // Deselect AI assistant using the store
+            if (typeof window !== 'undefined') {
+              // Dynamically import to avoid circular dependency
+              import('../store/useAIStore').then(mod => {
+                mod.useAIStore.getState().deselectAI();
+              });
+            }
+          }}
+        >
+          <FiX size={22} />
+        </button>
       </div>
       
       {/* Chat Messages */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4">
-        {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center text-base-content/70">
-            <div className="w-20 h-20 mb-6 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-              <Lightbulb size={40} className="text-blue-500 dark:text-blue-300" />
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-2">
+  {cleanedMessages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <div className="w-24 h-24 mb-6 rounded-full bg-base-200 flex items-center justify-center">
+              <img src="/images/ai-logo.svg" alt="LynqIt AI" className="w-14 h-14" />
             </div>
-            <h3 className="text-xl font-medium mb-3">Welcome to LynqIt AI</h3>
-            <p className="max-w-md px-4 mb-2">
+            <h3 className="text-2xl font-medium mb-3 text-base-content">Welcome to LynqIt AI</h3>
+            <p className="max-w-md px-4 mb-2 text-neutral">
               Ask me anything! I can help with questions, provide information, or analyze images.
-            </p>
-            <p className="text-sm text-base-content/60 max-w-md px-4">
-              Your conversations are saved in the database and available in the sidebar.
             </p>
           </div>
         )}
         
-        {messages.map((message, index) => (
+  {cleanedMessages.map((message, index) => (
           <div
             key={index}
             className={`mb-6 ${message.role === 'user' ? 'text-right' : 'text-left'}`}
@@ -222,36 +247,36 @@ const AIChatContainer = () => {
             <div className="flex items-start gap-3 mb-2">
               {message.role !== 'user' && (
                 <div className="flex-shrink-0">
-                  <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
-                    <span className="text-white font-bold">A</span>
+                  <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
+                    <img src="/images/ai-logo.svg" alt="LynqIt AI" className="w-6 h-6" />
                   </div>
                 </div>
               )}
               
               <div className={message.role === 'user' ? 'ml-auto flex flex-col items-end' : 'flex flex-col'}>
-                <div className="text-xs text-base-content/70 mb-1">
+                <div className="text-xs text-medium-gray mb-1">
                   {message.role === 'user' ? 'You' : 'LynqIt AI'} • {formatTimeAgo(message.timestamp)}
                 </div>
                 
                 <div className={`max-w-3xl ${
-                  message.role === 'user' 
-                    ? 'bg-primary/5 border border-primary/10' 
+                  message.role === 'user'
+                    ? 'bg-chat-bubble-primary text-white'
                     : message.isProcessing
-                    ? 'bg-base-200/80 border border-base-300'
+                    ? 'bg-light-gray text-medium-gray'
                     : message.isTemporary
-                    ? 'bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800/30'
+                    ? 'bg-light-gray text-text'
                     : message.isError
-                    ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/20'
-                    : 'bg-base-100'
-                } p-4 rounded-md shadow-sm ${
+                    ? 'bg-error/10 text-text'
+                    : 'bg-chat-bubble-secondary dark:bg-chat-bubble-secondary-dark text-base-content'
+                } p-4 rounded-lg shadow-message ${
                   message.isProcessing ? 'animate-pulse' : ''
                 }`}>
                   {message.isProcessing ? (
                     <div className="flex items-center space-x-3">
                       <div className="flex space-x-1">
-                        <div className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-300 animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                        <div className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-300 animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                        <div className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-300 animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                        <div className="w-2 h-2 rounded-full bg-tangerine animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                        <div className="w-2 h-2 rounded-full bg-tangerine animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                        <div className="w-2 h-2 rounded-full bg-tangerine animate-bounce" style={{ animationDelay: '300ms' }}></div>
                       </div>
                       <span>{message.content}</span>
                     </div>
@@ -299,9 +324,17 @@ const AIChatContainer = () => {
               
               {message.role === 'user' && (
                 <div className="flex-shrink-0">
-                  <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
-                    <span className="text-primary-content font-bold">U</span>
-                  </div>
+                  {authUser?.profilePic ? (
+                    <div className="w-10 h-10 rounded-full overflow-hidden">
+                      <img src={authUser.profilePic} alt={authUser.fullName || 'You'} className="w-full h-full object-cover" />
+                    </div>
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
+                      <span className="text-primary-content font-bold">
+                        {(authUser?.fullName?.[0] || authUser?.username?.[0] || 'U').toUpperCase()}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -309,23 +342,26 @@ const AIChatContainer = () => {
         ))}
         
         {/* Only show loading indicator if there's no processing message already visible */}
-        {isLoading && !messages.some(msg => msg.isProcessing) && (
+        {isLoading && (
           <div className="mb-6 text-left">
             <div className="flex items-start gap-3 mb-2">
               <div className="flex-shrink-0">
-                <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
-                  <span className="text-white font-bold">A</span>
+                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
+                  <span className="text-secondary font-bold">A</span>
                 </div>
               </div>
-              
               <div className="flex flex-col">
-                <div className="text-xs text-base-content/70 mb-1">
+                <div className="text-xs text-neutral mb-1">
                   LynqIt AI • now
                 </div>
-                
-                <div className="bg-base-100 p-4 rounded-md shadow-sm">
+                <div className="bg-base-200 p-4 rounded-md shadow-sm">
                   <div className="flex space-x-2">
-                    <div className="loading loading-dots loading-md"></div>
+                    <div className="flex space-x-1">
+                      <div className="w-2 h-2 rounded-full bg-tangerine animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                      <div className="w-2 h-2 rounded-full bg-tangerine animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                      <div className="w-2 h-2 rounded-full bg-tangerine animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    </div>
+                    <span className="text-sm text-neutral">Lynqing...</span>
                   </div>
                 </div>
               </div>
@@ -365,8 +401,8 @@ const AIChatContainer = () => {
       )}
       
       {/* Input Area */}
-      <div className="p-2 bg-gray-900">
-        <form onSubmit={handleSubmit} className="flex items-center space-x-2 rounded-full bg-gray-800 px-4 py-2">
+      <div className="p-1.5 bg-base-100">
+        <form onSubmit={handleSubmit} className="flex items-center gap-2 rounded-full bg-base-200 px-3 py-1.5">
           <input
             type="file"
             ref={fileInputRef}
@@ -378,36 +414,47 @@ const AIChatContainer = () => {
           <button
             type="button" 
             onClick={(e) => handleAttachmentClick(e)}
-            className="text-gray-400 hover:text-gray-200 transition-colors"
+            className="text-medium-gray hover:text-text-secondary transition-colors"
             title="Attach files"
           >
-            <FiPaperclip size={20} />
+            <FiPaperclip size={18} />
           </button>
-          <input
-            type="text"
+          <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type a message..."
-            className="bg-transparent border-none focus:outline-none text-gray-100 w-full py-1 placeholder-gray-500"
+            className="bg-transparent border-none focus:outline-none text-base-content w-full py-1 placeholder-neutral resize-none min-h-[40px] max-h-40"
             disabled={isLoading}
+            rows={1}
+            onPaste={async (e) => {
+              if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
+                const file = e.clipboardData.files[0];
+                if (file.type.startsWith('image/')) {
+                  e.preventDefault();
+                  // Use existing file input logic for images
+                  const dataTransfer = { target: { files: [file] } };
+                  handleFileChange(dataTransfer);
+                }
+              }
+            }}
             onKeyDown={(e) => {
-              // Allow Enter key to submit the form only when input has content or attachments exist
               if (e.key === 'Enter' && !e.shiftKey) {
                 if (input.trim() || attachments.length > 0) {
                   e.preventDefault();
                   handleSubmit(e);
                 } else {
-                  // Prevent form submission if there's no content
                   e.preventDefault();
                 }
               }
+              // Shift+Enter inserts newline (default behavior)
             }}
+            style={{overflow: 'hidden'}}
           />
           <button
             type="submit"
             className={`p-1 rounded-full ${(!input.trim() && attachments.length === 0) || isLoading 
-              ? 'text-gray-500' 
-              : 'text-white bg-blue-500 hover:bg-blue-600'}`}
+              ? 'text-medium-gray' 
+              : 'text-white bg-tangerine hover:bg-tangerine/90'}`}
             disabled={(!input.trim() && attachments.length === 0) || isLoading}
           >
             <FiSend size={20} />

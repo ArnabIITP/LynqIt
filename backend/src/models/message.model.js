@@ -26,6 +26,22 @@ const messageSchema = new mongoose.Schema(
             required: true,
             default: 'direct'
         },
+        type: {
+            type: String,
+            default: null
+        },
+        lat: {
+            type: Number,
+            default: null
+        },
+        lng: {
+            type: Number,
+            default: null
+        },
+        address: {
+            type: String,
+            default: null
+        },
         text: {
             type: String,
         },
@@ -34,7 +50,48 @@ const messageSchema = new mongoose.Schema(
         },
         mediaType: {
             type: String,
-            enum: ['image', 'video', 'document', 'gif', null],
+            enum: ['image', 'video', 'document', 'audio', 'music', 'gif', 'poll', 'event', null],
+            default: null
+        },
+        // Poll message fields
+        poll: {
+            question: { type: String },
+            options: [
+                {
+                    option: String,
+                    votes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+                }
+            ],
+            voted: [{
+                user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+                optionIndex: Number
+            }],
+            isAnonymous: { type: Boolean, default: false },
+            allowsMultipleAnswers: { type: Boolean, default: false }
+        },
+
+        // Event message fields
+        event: {
+            title: { type: String },
+            description: { type: String },
+            eventDate: { type: Date },
+            location: { type: String },
+            attendees: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+            rsvps: [{
+                user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+                status: { type: String, enum: ['yes', 'no', 'maybe'] }
+            }]
+        },
+        fileName: {
+            type: String,
+            default: null
+        },
+        fileSize: {
+            type: Number,
+            default: null
+        },
+        caption: {
+            type: String,
             default: null
         },
         mentions: [{
@@ -179,6 +236,11 @@ const messageSchema = new mongoose.Schema(
         originalMessageId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Message",
+            default: null
+        },
+        // Auto-cleanup tracking
+        mediaDeletedAt: {
+            type: Date,
             default: null
         }
     },

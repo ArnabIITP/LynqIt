@@ -1,4 +1,4 @@
-import { X, FileText, Info, ImageIcon, FileIcon, Link2, LockIcon, Users, ChevronRight, Hash, Settings, UserPlus, UserMinus, Share2, Crown, Shield, Copy, Check, Edit3, Camera, UserX, Flag, MoreVertical, Key, RefreshCw } from "lucide-react";
+import { X, FileText, Info, ImageIcon, FileIcon, Link2, LockIcon, Users, ChevronRight, Hash, Settings, UserPlus, UserMinus, Share2, Crown, Shield, Copy, Check, Edit3, Camera, UserX, Flag, MoreVertical, Key, RefreshCw, Trash2 } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { useGroupStore } from "../store/useGroupStore";
@@ -8,6 +8,7 @@ import toast from "react-hot-toast";
 import GroupEditModal from "./GroupEditModal";
 import GroupSettingsModal from "./GroupSettingsModal";
 import BlockUserButton from "./BlockUserButton";
+import GroupAvatar from "./GroupAvatar";
 import PinButton from "./PinButton";
 import { axiosInstance } from "../lib/axios";
 import { useNavigate } from "react-router-dom";
@@ -420,11 +421,11 @@ const ChatHeader = () => {
     }
   }, [selectedUser, userStatuses]);
 
-  // Filter media from messages
+  // Filter media from messages (images, videos, gifs, audios)
   const getMediaMessages = () => {
     if (!currentMessages || (!selectedUser && !selectedGroup)) return [];
     return currentMessages.filter(
-      message => message.mediaType === 'image' || message.mediaType === 'video' || message.mediaType === 'gif'
+      message => ['image','video','gif','audio','music'].includes(message.mediaType)
     );
   };
 
@@ -501,45 +502,56 @@ const ChatHeader = () => {
                   </div>
 
                   {/* Group Description - Editable if user has permission */}
-                  <div className="bg-base-200 p-3 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium">Description</div>
+                  <div className="space-y-1.5">
+                    <div className="text-sm text-zinc-400 flex items-center gap-2 justify-between">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4" />
+                        About Group
+                      </div>
                       {canChangeDescription() && (
-                        <button
+                        <button 
                           onClick={() => startEdit('description')}
-                          className="btn btn-ghost btn-xs"
+                          className="btn btn-sm btn-ghost btn-circle"
                         >
-                          <Edit3 size={12} />
+                          {editingField === 'description' ? <X size={16} /> : <Edit3 size={16} />}
                         </button>
                       )}
                     </div>
                     {editingField === 'description' ? (
-                      <div className="mt-2">
-                        <textarea
-                          value={editingValue}
-                          onChange={(e) => setEditingValue(e.target.value)}
-                          className="textarea textarea-sm w-full"
-                          placeholder="Enter group description"
-                          rows="3"
-                          autoFocus
-                        />
-                        <div className="flex gap-2 mt-2">
-                          <button
-                            onClick={() => handleSaveEdit('description')}
-                            className="btn btn-primary btn-xs"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => setEditingField(null)}
-                            className="btn btn-ghost btn-xs"
-                          >
-                            Cancel
-                          </button>
+                      <div className="space-y-2">
+                        <div className="flex flex-col gap-2">
+                          <textarea
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            className="px-4 py-2.5 bg-base-200 rounded-lg border w-full"
+                            placeholder="Write something about the group..."
+                            rows={3}
+                            maxLength={150}
+                            autoFocus
+                          />
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-zinc-400">{editingValue.length}/150 characters</span>
+                            <button 
+                              onClick={() => handleSaveEdit('description')}
+                              className="btn btn-sm btn-primary"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingField(null)}
+                              className="btn btn-ghost btn-xs ml-2"
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="text-sm">{selectedGroup.description || "No description"}</div>
+                      <div className="bg-base-200 rounded-lg p-4">
+                        <p className="text-sm">
+                          {selectedGroup.description || "Add a group about/description..."}
+                        </p>
+                      </div>
                     )}
                   </div>
 
@@ -550,6 +562,57 @@ const ChatHeader = () => {
                   <div className="bg-base-200 p-3 rounded-lg">
                     <div className="text-sm font-medium">Members</div>
                     <div className="text-sm">{selectedGroup.members?.length || 0} members</div>
+                  </div>
+
+                  {/* Exit Group and Report Group buttons (WhatsApp style) */}
+                  <div className="flex flex-col gap-2 mt-6">
+                    {/* Exit Group button for non-owners */}
+                    {!isGroupOwner() && (
+                      <button
+                        onClick={async () => {
+                          if (!window.confirm("Are you sure you want to leave this group?")) return;
+                          try {
+                            await axiosInstance.delete(`/groups/${selectedGroup._id}/members/${authUser._id}`);
+                            toast.success("You have left the group.");
+                            setShowProfileModal(false);
+                            setSelectedGroup(null);
+                          } catch (error) {
+                            toast.error(error.response?.data?.message || "Failed to leave group");
+                          }
+                        }}
+                        className="w-full btn btn-error btn-outline"
+                      >
+                        <UserX size={18} className="mr-2" /> Exit Group
+                      </button>
+                    )}
+                    {/* Report Group button for all members */}
+                    <button
+                      onClick={async () => {
+                        try {
+                          const reason = prompt('Please select a reason for reporting this group:\n\n1. Spam\n2. Harassment\n3. Hate Speech\n4. Violence\n5. Inappropriate Content\n6. Impersonation\n7. Scam\n8. Other\n\nEnter the number (1-8):');
+                          if (reason === null) return;
+                          const reasonNum = parseInt(reason);
+                          if (isNaN(reasonNum) || reasonNum < 1 || reasonNum > 8) {
+                            toast.error('Invalid reason selected. Please enter a number between 1-8.');
+                            return;
+                          }
+                          const reasons = ['spam', 'harassment', 'hate_speech', 'violence', 'inappropriate_content', 'impersonation', 'scam', 'other'];
+                          const selectedReason = reasons[reasonNum - 1];
+                          const description = prompt('Please provide additional details (optional):');
+                          if (description === null) return;
+                          await axiosInstance.post(`/groups/${selectedGroup._id}/report`, {
+                            reason: selectedReason,
+                            description: description || ''
+                          });
+                          toast.success('Group reported. Thank you for your feedback.');
+                        } catch (error) {
+                          toast.error(error.response?.data?.error || 'Failed to report group');
+                        }
+                      }}
+                      className="w-full btn btn-warning btn-outline"
+                    >
+                      <Flag size={18} className="mr-2" /> Report Group
+                    </button>
                   </div>
                 </div>
               </div>
@@ -579,10 +642,10 @@ const ChatHeader = () => {
                     className="aspect-square bg-base-200 rounded-md overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
                     onClick={() => {
                       if (message.mediaType === 'video') {
-                        // Open video in a new tab for better video controls
+                        window.open(message.image, '_blank');
+                      } else if (message.mediaType === 'audio' || message.mediaType === 'music') {
                         window.open(message.image, '_blank');
                       } else {
-                        // Open image in modal for better viewing experience
                         setSelectedMedia(message);
                         setShowMediaModal(true);
                       }
@@ -597,6 +660,13 @@ const ChatHeader = () => {
                               <path d="M8 5v14l11-7z"/>
                             </svg>
                           </div>
+                        </div>
+                      </div>
+                    ) : (message.mediaType === 'audio' || message.mediaType === 'music') ? (
+                      <div className="flex items-center justify-center h-full bg-base-300 relative">
+                        <span className="text-xs">Audio</span>
+                        <div className="absolute bottom-2 left-2 right-2 h-1 bg-base-100/50 rounded-full">
+                          <div className="h-1 bg-primary rounded-full w-1/3"></div>
                         </div>
                       </div>
                     ) : (
@@ -1005,15 +1075,7 @@ const ChatHeader = () => {
                     }}
                   >
                     <div className="avatar">
-                      <div className="w-10 h-10 rounded-full">
-                        {group.avatar ? (
-                          <img src={group.avatar} alt={group.name} />
-                        ) : (
-                          <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center">
-                            <span className="text-primary text-sm">👥</span>
-                          </div>
-                        )}
-                      </div>
+                        <GroupAvatar name={group.name} avatarUrl={group.avatar} size={10} />
                     </div>
                     <div className="flex-1">
                       <div className="font-medium">{group.name}</div>
@@ -1046,52 +1108,44 @@ const ChatHeader = () => {
   if (!selectedUser && !selectedGroup) return null;
 
   return (
-    <div className="border-b shadow-sm py-3 px-6 flex justify-between items-center gap-3">
-      <div className="flex items-center gap-3 overflow-hidden flex-1">
+    <div className="border-b shadow-sidebar py-1 px-3 flex justify-between items-center gap-2 bg-base-100">
+      <div className="flex items-center gap-2 overflow-hidden flex-1">
         <div
           className="cursor-pointer relative avatar"
           onClick={() => setShowProfileModal(true)}
         >
-          <div className="w-10 rounded-full">
+          <div className="w-9 h-9 rounded-full">
             {isGroupChat ? (
-              selectedGroup.avatar ? (
-                <img
-                  src={selectedGroup.avatar}
-                  alt={selectedGroup.name}
-                />
-              ) : (
-                <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center">
-                  <span className="text-primary text-lg">👥</span>
-                </div>
-              )
+              <GroupAvatar name={selectedGroup?.name} avatarUrl={selectedGroup?.avatar} size={11} />
             ) : (
               <img
                 src={selectedUser.profilePic}
                 alt={selectedUser.fullName}
+                className="rounded-full"
               />
             )}
           </div>
           {/* Online status indicator for direct chats */}
           {!isGroupChat && getUserOnlineStatus() && (
-            <div className="absolute bottom-0 right-0 w-3 h-3 bg-success rounded-full border-2 border-base-100"></div>
+            <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-online rounded-full border-2 border-sidebar-bg"></div>
           )}
         </div>
         <div className="flex flex-col overflow-hidden flex-grow">
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold truncate flex-grow">
+            <h3 className="font-semibold truncate flex-grow text-dark-gray">
               {isGroupChat ? selectedGroup.name : selectedUser.fullName}
             </h3>
           </div>
           <div
-            className="text-xs flex items-center gap-1 cursor-pointer hover:underline"
+            className="text-xs flex items-center gap-1 cursor-pointer text-medium-gray"
             onClick={() => setShowProfileModal(true)}
           >
             {isGroupChat ? (
               <span>{selectedGroup.members?.length || 0} members</span>
             ) : getUserOnlineStatus() ? (
               <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 bg-success rounded-full"></div>
-                <span>{lastSeenText}</span>
+                <div className="w-1.5 h-1.5 bg-online rounded-full"></div>
+                <span>Online</span>
               </div>
             ) : (
               <span>{lastSeenText}</span>
@@ -1100,18 +1154,18 @@ const ChatHeader = () => {
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         {/* Options Menu */}
         <div className="relative">
           <button
-            className="btn btn-ghost btn-sm btn-circle"
+            className="p-2 rounded-full hover:bg-light-gray transition-colors"
             onClick={() => setShowOptionsMenu(!showOptionsMenu)}
           >
-            <MoreVertical size={20} />
+            <MoreVertical size={18} className="text-medium-gray" />
           </button>
 
           {showOptionsMenu && (
-            <div className="absolute right-0 top-full mt-2 bg-base-100 rounded-lg shadow-lg border border-base-300 py-2 z-50 min-w-[200px]">
+            <div className="absolute right-0 top-full mt-2 bg-sidebar-bg dark:bg-base-200 rounded-lg shadow-dropdown py-1 z-50 min-w-[200px] border border-base-200 dark:border-base-300">
               {/* Pin Option */}
               <PinButton
                 itemId={isGroupChat ? selectedGroup._id : selectedUser._id}
@@ -1231,6 +1285,53 @@ const ChatHeader = () => {
               {/* Divider */}
               <div className="border-t border-base-300 my-1"></div>
 
+              {/* Clear Chat */}
+              {!isGroupChat ? (
+                <button
+                  onClick={async () => {
+                    setShowOptionsMenu(false);
+                    try {
+                      await useChatStore.getState().clearDirectChat(selectedUser._id);
+                    } catch {}
+                  }}
+                  className="w-full flex items-center gap-2 p-2 hover:bg-base-200 rounded text-error"
+                >
+                  <Trash2 size={16} />
+                  <span>Clear Chat (for me)</span>
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={async () => {
+                      setShowOptionsMenu(false);
+                      try {
+                        await useGroupStore.getState().clearGroupChat(selectedGroup._id);
+                      } catch {}
+                    }}
+                    className="w-full flex items-center gap-2 p-2 hover:bg-base-200 rounded text-error"
+                  >
+                    <Trash2 size={16} />
+                    <span>Clear Group Chat (for me)</span>
+                  </button>
+                  {isGroupOwner() && (
+                    <button
+                      onClick={async () => {
+                        setShowOptionsMenu(false);
+                        const confirmDelete = confirm('Delete this group for everyone? This removes all messages and media.');
+                        if (!confirmDelete) return;
+                        try {
+                          await useGroupStore.getState().deleteGroup(selectedGroup._id);
+                        } catch {}
+                      }}
+                      className="w-full flex items-center gap-2 p-2 hover:bg-base-200 rounded text-error"
+                    >
+                      <UserMinus size={16} />
+                      <span>Delete Group for Everyone</span>
+                    </button>
+                  )}
+                </>
+              )}
+
               {/* View Profile */}
               <button
                 onClick={() => {
@@ -1272,15 +1373,9 @@ const ChatHeader = () => {
                 <div className="avatar relative group">
                   <div className="size-20 rounded-full">
                     {isGroupChat ? (
-                      selectedGroup.avatar ? (
-                        <img src={selectedGroup.avatar} alt={selectedGroup.name} />
-                      ) : (
-                        <div className="w-20 h-20 bg-primary/20 rounded-full flex items-center justify-center">
-                          <span className="text-primary text-3xl">👥</span>
-                        </div>
-                      )
+                      <GroupAvatar name={selectedGroup?.name} avatarUrl={selectedGroup?.avatar} size={20} />
                     ) : (
-                      <img src={selectedUser.profilePic || "/avatar.png"} alt={selectedUser.fullName} />
+                      <img src={selectedUser?.profilePic || "/avatar.png"} alt={selectedUser?.fullName} />
                     )}
                   </div>
 

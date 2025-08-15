@@ -64,6 +64,27 @@ export const useStatusStore = create((set, get) => ({
     }
   },
 
+  // Create video status
+  createVideoStatus: async (formData) => {
+    set({ isCreatingStatus: true });
+    try {
+      const res = await axiosInstance.post("/status/video", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      set(state => ({
+        myStatuses: [res.data.status, ...state.myStatuses],
+        isCreatingStatus: false
+      }));
+      toast.success("Status posted successfully!");
+      return res.data.status;
+    } catch (error) {
+      console.error("Error creating video status:", error);
+      toast.error(error.response?.data?.error || "Failed to post status");
+      set({ isCreatingStatus: false });
+      throw error;
+    }
+  },
+
   // Get my statuses
   getMyStatuses: async () => {
     set({ isLoadingMyStatuses: true });

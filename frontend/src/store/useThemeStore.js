@@ -1,8 +1,18 @@
 import { create } from "zustand";
+import { lynqitTheme } from "../theme/lynqit-theme";
 
 const getTimeBasedTheme = () => {
   const currentHour = new Date().getHours();
   return (currentHour >= 6 && currentHour < 18) ? "light" : "dark"; // Day: 6am-6pm, Night: 6pm-6am
+};
+
+// Get the current theme variables based on theme name
+export const getThemeVariables = (themeName = "light") => {
+  if (themeName === "dark") {
+    return lynqitTheme.dark;
+  } else {
+    return lynqitTheme.light;
+  }
 };
 
 // Set default theme based on time if auto theme hasn't been configured yet
@@ -26,13 +36,25 @@ const initializeAutoTheme = () => {
 // Initialize auto theme setting before creating the store
 const defaultAutoThemeEnabled = initializeAutoTheme();
 
+// Set the initial theme attribute on document
+const initialTheme = localStorage.getItem("chat-theme") || getTimeBasedTheme();
+document.documentElement.setAttribute('data-theme', initialTheme);
+
 export const useThemeStore = create((set, get) => ({
-  theme: localStorage.getItem("chat-theme") || getTimeBasedTheme(),
+  theme: initialTheme,
   autoThemeEnabled: defaultAutoThemeEnabled,
+  themeVariables: getThemeVariables(initialTheme),
   
   setTheme: (theme) => {
     localStorage.setItem("chat-theme", theme);
-    set({ theme });
+    
+    // Update data-theme attribute on document for CSS selectors
+    document.documentElement.setAttribute('data-theme', theme);
+    
+    set({ 
+      theme,
+      themeVariables: getThemeVariables(theme)
+    });
   },
   
   toggleAutoTheme: () => {
@@ -44,7 +66,11 @@ export const useThemeStore = create((set, get) => ({
     if (newValue) {
       const timeBasedTheme = getTimeBasedTheme();
       localStorage.setItem("chat-theme", timeBasedTheme);
-      set({ autoThemeEnabled: newValue, theme: timeBasedTheme });
+      set({ 
+        autoThemeEnabled: newValue, 
+        theme: timeBasedTheme,
+        themeVariables: getThemeVariables(timeBasedTheme)
+      });
     } else {
       set({ autoThemeEnabled: newValue });
     }
@@ -55,7 +81,14 @@ export const useThemeStore = create((set, get) => ({
     if (autoThemeEnabled) {
       const timeBasedTheme = getTimeBasedTheme();
       localStorage.setItem("chat-theme", timeBasedTheme);
-      set({ theme: timeBasedTheme });
+      
+      // Update data-theme attribute on document for CSS selectors
+      document.documentElement.setAttribute('data-theme', timeBasedTheme);
+      
+      set({ 
+        theme: timeBasedTheme,
+        themeVariables: getThemeVariables(timeBasedTheme)
+      });
     }
   }
 }));

@@ -14,11 +14,12 @@ export const useAIStore = create(
         conversationId: null,
         attachments: [],
         isLoading: false,
-        isSelected: false,
+        isSelected: false, // Make sure this stays false by default
         
         // Conversation history
         conversationHistory: [],
         selectedHistoryId: null,
+        isHistoryLoading: false,
 
     // Select the AI assistant
     selectAI: () => {
@@ -30,9 +31,15 @@ export const useAIStore = create(
       set({ isSelected: false });
     },
 
-    // Set messages
+    // Set messages (filter out any legacy processing placeholders)
     setMessages: (messages) => {
-      set({ messages });
+      const cleaned = Array.isArray(messages)
+        ? messages.filter(m => {
+            const c = typeof m?.content === 'string' ? m.content.toLowerCase() : '';
+            return !m?.isProcessing && !c.includes('processing your request');
+          })
+        : [];
+      set({ messages: cleaned });
     },
 
     // Add message to the conversation
@@ -62,7 +69,10 @@ export const useAIStore = create(
         set({
           selectedHistoryId: historyId,
           conversationId: history.conversationId,
-          messages: history.messages,
+          messages: (history.messages || []).filter(m => {
+            const c = typeof m?.content === 'string' ? m.content.toLowerCase() : '';
+            return !m?.isProcessing && !c.includes('processing your request');
+          }),
           isSelected: true,
           isLoading: false // Ensure we're not in loading state
         });
@@ -89,7 +99,10 @@ export const useAIStore = create(
               });
               
               set({
-                messages: response.data.messages,
+                messages: (response.data.messages || []).filter(m => {
+                  const c = typeof m?.content === 'string' ? m.content.toLowerCase() : '';
+                  return !m?.isProcessing && !c.includes('processing your request');
+                }),
                 conversationHistory: updatedHistory
               });
             }
@@ -154,28 +167,7 @@ export const useAIStore = create(
           formData.append('attachments', file);
         });
         
-        // Show "thinking" message if the request takes more than 2 seconds
-        // but only if no processing message is already visible
-        let processingTimeout;
-        const currentMessages = get().messages;
-        const hasProcessingMessage = currentMessages.some(msg => msg.isProcessing);
-        
-        if (!hasProcessingMessage) {
-          const processingMessage = {
-            role: 'assistant',
-            content: 'Processing your request...',
-            isProcessing: true,
-            timestamp: new Date(),
-          };
-          
-          // Reference to setTimeout ID for later cleanup
-          processingTimeout = setTimeout(() => {
-            // Check again before adding to avoid race conditions
-            if (!get().messages.some(msg => msg.isProcessing)) {
-              get().addMessage(processingMessage);
-            }
-          }, 2000);
-        }
+  // Removed delayed processing placeholder bubble
         
         const response = await axios.post(`${apiBaseUrl}/ai/query`, formData, {
           withCredentials: true,
@@ -184,15 +176,7 @@ export const useAIStore = create(
           },
         });
         
-        // Clear the processing timeout if it exists
-        if (processingTimeout) {
-          clearTimeout(processingTimeout);
-        }
-        
-        // Remove any processing messages
-        set((state) => ({
-          messages: state.messages.filter(msg => !msg.isProcessing)
-        }));
+  // No processing placeholder to clear
         
         // Set the conversation ID for future messages
         const responseConversationId = response.data.conversationId;
@@ -215,11 +199,6 @@ export const useAIStore = create(
           
           // Wait a bit and try again
           setTimeout(() => {
-            // First remove any processing messages to prevent duplicates
-            set((state) => ({
-              messages: state.messages.filter(msg => !msg.isProcessing)
-            }));
-            
             // Retry the same message after a delay
             get().sendMessage(text, attachments);
           }, 5000);
@@ -284,15 +263,7 @@ export const useAIStore = create(
       } catch (error) {
         console.error('Error sending message to AI:', error);
         
-        // Clear any processing timeout if it exists
-        if (processingTimeout) {
-          clearTimeout(processingTimeout);
-        }
-        
-        // Remove any processing messages first
-        set((state) => ({
-          messages: state.messages.filter(msg => !msg.isProcessing)
-        }));
+  // No processing placeholder to clear
         
         // Add error message to chat
         const errorMessage = error.response?.data?.message || 
@@ -385,8 +356,9 @@ export const useAIStore = create(
   };
 }), {
   name: 'ai-conversation-store',
-  // Only persist these keys
+  // Only persist these keys - explicitly exclude isSelected to prevent it from persisting between sessions
   partialize: (state) => ({
-    conversationHistory: state.conversationHistory
+    conversationHistory: state.conversationHistory,
+    // Do not include isSelected to ensure it defaults to false on app load
   }),
 });

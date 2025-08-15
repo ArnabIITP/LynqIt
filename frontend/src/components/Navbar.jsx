@@ -1,15 +1,22 @@
 import { Link } from "react-router-dom";
 import { useAuthStore } from "../store/useAuthStore";
 import { useThemeStore } from "../store/useThemeStore";
-import { LogOut, MessageSquare, Settings, Sun, Moon, Clock, Search } from "lucide-react";
+import { LogOut, Settings, Sun, Moon, Clock, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import GlobalSearchModal from "./GlobalSearchModal";
+import { lynqitTheme } from "../theme/lynqit-theme";
 
 const Navbar = () => {
   const { logout, authUser } = useAuthStore();
   const { theme, autoThemeEnabled, toggleAutoTheme, setTheme, checkAutoTheme } = useThemeStore();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+
+  // No need to force a theme on component mount
+  // Let the theme system handle it based on user preferences
+  useEffect(() => {
+    // This space intentionally left blank
+  }, []);
 
   // Update current time every minute
   useEffect(() => {
@@ -82,62 +89,54 @@ const Navbar = () => {
   };
 
   return (
-    <header
-      className="bg-base-100 border-b border-base-300 fixed w-full top-0 z-40
-    backdrop-blur-lg bg-base-100/80"
-    >
-      <div className="container mx-auto px-4 h-16">
-        <div className="flex items-center justify-between h-full">
-          <div className="flex items-center gap-8">
-            <Link to="/" className="flex items-center gap-2.5 hover:opacity-80 transition-all">
-              <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                <MessageSquare className="w-5 h-5 text-primary" />
-              </div>
-              <h1 className="text-lg font-bold">LynqIt</h1>
-            </Link>
-          </div>
+    <header className="app-nav fixed w-full top-0 z-40">
+      <div className="mx-auto px-4 lg:px-8 h-16 flex items-center justify-between">
+        <div className="flex items-center gap-8">
+          <Link to="/" className="group flex items-center gap-2 transition-base">
+            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-md ring-1 ring-black/5 group-hover:scale-105 transition-base">
+              <img src="/logo.svg" alt="LynqIt Logo" className="h-7 w-7" />
+            </div>
+            <h1 className="text-[1.45rem] font-semibold tracking-tight flex items-center select-none">
+              <span className="text-gradient-brand font-display">Lynq</span>
+              <span className="ml-0.5 bg-clip-text text-transparent bg-gradient-to-r from-orange-400 via-orange-500 to-rose-500 font-display">It</span>
+            </h1>
+          </Link>
+        </div>
 
-          <div className="flex items-center gap-2">
-            {/* Global Search button - Only show for authenticated users */}
-            {authUser && (
-              <button
-                onClick={() => setShowGlobalSearch(true)}
-                className="btn btn-sm btn-ghost tooltip tooltip-bottom"
-                data-tip="Global Search (Ctrl+K)"
-              >
-                <Search className="w-4 h-4" />
-              </button>
-            )}
-
-            {/* Theme toggle button */}
+        <div className="flex items-center gap-2">
+          {authUser && (
             <button
-              onClick={cycleThemeMode}
-              className="btn btn-sm btn-ghost tooltip tooltip-bottom"
-              data-tip={getThemeTooltip()}
+              onClick={() => setShowGlobalSearch(true)}
+              className="icon-btn group"
+              title="Global Search (Ctrl+K)"
             >
-              {getThemeIcon()}
+              <Search className="w-5 h-5 text-gray-600 group-hover:text-gray-800 dark:text-gray-300 dark:group-hover:text-white transition-base" />
+              <span className="sr-only">Open global search</span>
             </button>
+          )}
+
+          <button
+            onClick={cycleThemeMode}
+            className="icon-btn tooltip tooltip-bottom"
+            data-tip={getThemeTooltip()}
+          >
+            <span className="text-gray-600 dark:text-gray-300">{getThemeIcon()}</span>
+          </button>
 
             <Link
               to={"/settings"}
-              className={`
-              btn btn-sm gap-2 transition-colors
-
-              `}
+              className="btn-modern-ghost hidden sm:inline-flex items-center gap-2 h-10 px-4 font-medium"
             >
               <Settings className="w-4 h-4" />
-              <span className="hidden sm:inline">Settings</span>
+              <span>Settings</span>
             </Link>
 
-
-
-            {authUser && (
-              <button className="flex gap-2 items-center" onClick={logout}>
-                <LogOut className="size-5" />
-                <span className="hidden sm:inline">Logout</span>
-              </button>
-            )}
-          </div>
+          {authUser && (
+            <button className="btn-modern-ghost inline-flex items-center gap-2 h-10 px-4" onClick={logout}>
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
+          )}
         </div>
       </div>
 

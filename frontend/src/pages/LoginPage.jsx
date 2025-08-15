@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
 import AuthImagePattern from "../components/AuthImagePattern";
 import { Link, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, Loader2, Lock, Mail, MessageSquare } from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
 import GoogleButton from "../components/GoogleButton";
 import GoogleUsernamePrompt from "../components/GoogleUsernamePrompt";
 import toast from "react-hot-toast";
@@ -62,7 +62,7 @@ const LoginPage = () => {
         <div className="w-full max-w-md">
           {/* Header with App Logo */}
           <div className="flex items-center mb-5 justify-center">
-            <MessageSquare className="size-6 text-primary mr-2" />
+            <img src="/logo.svg" alt="LynqIt Logo" className="size-8 mr-2" />
             <div>
               <h1 className="text-xl font-semibold">Welcome Back</h1>
               <p className="text-xs text-base-content/60">Sign in to your account</p>

@@ -8,7 +8,7 @@ const MessageStatusIndicator = ({ message, isOwnMessage }) => {
   if (!isOwnMessage) return null;
   
   // Determine the appropriate text color based on message ownership
-  const textColorClass = isOwnMessage ? 'text-primary-content' : 'text-base-content';
+  const textColorClass = isOwnMessage ? 'text-dark-gray' : 'text-medium-gray';
 
   const handleResendMessage = () => {
     resendMessage(message._id);
@@ -18,16 +18,16 @@ const MessageStatusIndicator = ({ message, isOwnMessage }) => {
     switch (message.status) {
       case 'sending':
       case 'pending':
-        return <Clock size={14} className={`${textColorClass}/70`} />;
+        return <Clock size={14} className="text-medium-gray" />;
 
       case 'sent':
-        return <Check size={14} className={`${textColorClass}/80`} />;
+        return <Check size={14} className="text-medium-gray" />;
 
       case 'delivered':
-        return <CheckCheck size={14} className={`${textColorClass}/80`} />;
+        return <CheckCheck size={14} className="text-medium-gray" />;
 
       case 'seen':
-        return <CheckCheck size={14} className={`${textColorClass} font-bold`} />;
+        return <CheckCheck size={14} className="text-online" />;
 
       case 'failed':
         return (
