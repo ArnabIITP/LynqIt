@@ -9,7 +9,8 @@ import {
   getBlockedUsers,
   reportUser,
   reportMessage,
-  getReports
+  getReports,
+  findUserByUsername
 } from "../controllers/user.controller.js";
 
 const router = express.Router();
@@ -28,5 +29,8 @@ router.get("/blocked", protectRoute, getBlockedUsers);
 router.post("/report/user", protectRoute, reportUser);
 router.post("/report/message", protectRoute, reportMessage);
 router.get("/reports", protectRoute, getReports); // Admin only - add admin middleware later
+
+// Find user by username (for global search new user)
+router.get("/find/username/:username", protectRoute, findUserByUsername);
 
 export default router;

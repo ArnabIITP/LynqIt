@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { axiosInstance } from "../lib/axios";
 import { Search, X, MessageCircle, Users, Clock, ArrowRight } from "lucide-react";
 import { useChatStore } from "../store/useChatStore";
 import { useGroupStore } from "../store/useGroupStore";
@@ -17,6 +18,29 @@ const GlobalSearchModal = ({ isOpen, onClose }) => {
   const searchInputRef = useRef(null);
 
   const { messages, users, allUsers, setSelectedUser, getAllUsers } = useChatStore();
+  const [newUserSearchLoading, setNewUserSearchLoading] = useState(false);
+  const [newUserError, setNewUserError] = useState("");
+  const [newUserResult, setNewUserResult] = useState(null);
+  // Search for new user by username (API call)
+  const handleSearchNewUser = async () => {
+    setNewUserSearchLoading(true);
+    setNewUserError("");
+    setNewUserResult(null);
+    try {
+      const res = await axiosInstance.get(`/user/find/username/${searchQuery.trim()}`);
+      setNewUserResult(res.data.user);
+    } catch (err) {
+      setNewUserError(err.response?.data?.error || "User not found");
+    } finally {
+      setNewUserSearchLoading(false);
+    }
+  };
+
+  // When a new user is found and clicked, add to chat and open chat
+  const handleNewUserClick = (user) => {
+    setSelectedUser(user);
+    onClose();
+  };
   const { groups, groupMessages, setSelectedGroup } = useGroupStore();
   const { authUser } = useAuthStore();
 
@@ -409,6 +433,44 @@ const GlobalSearchModal = ({ isOpen, onClose }) => {
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* New user search option if no user found and query is not empty */}
+              {filteredResults.users.length === 0 && searchQuery.trim() && (
+                <div className="mt-4">
+                  <button
+                    className="btn btn-primary w-full flex items-center justify-center gap-2"
+                    onClick={handleSearchNewUser}
+                    disabled={newUserSearchLoading}
+                  >
+                    {newUserSearchLoading ? (
+                      <span className="loading loading-spinner loading-xs"></span>
+                    ) : (
+                      <Users size={16} />
+                    )}
+                    Search for new user: <span className="font-bold">{searchQuery.trim()}</span>
+                  </button>
+                  {newUserError && (
+                    <div className="text-error text-xs mt-2">{newUserError}</div>
+                  )}
+                  {newUserResult && (
+                    <button
+                      className="w-full p-3 bg-base-200 hover:bg-base-300 rounded-lg text-left mt-2 flex items-center gap-3"
+                      onClick={() => handleNewUserClick(newUserResult)}
+                    >
+                      <img
+                        src={newUserResult.profilePic || "/avatar.png"}
+                        alt={newUserResult.fullName}
+                        className="w-10 h-10 rounded-full flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{newUserResult.fullName}</p>
+                        <p className="text-sm text-base-content/60 truncate">@{newUserResult.username}</p>
+                      </div>
+                      <ArrowRight size={16} className="text-base-content/40 flex-shrink-0" />
+                    </button>
+                  )}
                 </div>
               )}
 

@@ -1,3 +1,21 @@
+// Find user by username (for global search new user)
+export const findUserByUsername = async (req, res) => {
+  try {
+    const { username } = req.params;
+    if (!username) {
+      return res.status(400).json({ error: "Username is required" });
+    }
+    const user = await User.findOne({ username: username.toLowerCase() })
+      .select("_id fullName username profilePic isOnline lastSeen bio");
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    return res.status(200).json({ user });
+  } catch (error) {
+    console.log("Error in findUserByUsername controller: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
 import User from "../models/user.model.js";
 import Group from "../models/group.model.js";
 import Message from "../models/message.model.js";
