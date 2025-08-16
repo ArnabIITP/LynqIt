@@ -15,8 +15,8 @@ const LocationMessage = ({ lat, lng, address, time, status }) => {
 	return (
 		<div className="flex flex-col items-end max-w-xs">
 			<div className="bg-base-200 rounded-lg p-3 border border-base-300 w-full">
-				<div style={{ height: 180, width: "100%" }}>
-					<MapContainer center={[lat, lng]} zoom={15} style={{ height: "100%", width: "100%" }} scrollWheelZoom={false} dragging={false} doubleClickZoom={false} zoomControl={false} attributionControl={false}>
+				   <div style={{ height: 180, width: "100%", position: "relative", zIndex: 1 }}>
+					   <MapContainer center={[lat, lng]} zoom={15} style={{ height: "100%", width: "100%", zIndex: 1 }} scrollWheelZoom={false} dragging={false} doubleClickZoom={false} zoomControl={false} attributionControl={false}>
 						<TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 						<Marker position={[lat, lng]} />
 					</MapContainer>
