@@ -1,3 +1,64 @@
+// Update group message read receipt for a user
+export const updateGroupMessageReadReceipt = async (req, res) => {
+  try {
+    const { messageId } = req.body;
+    const userId = req.user._id;
+    if (!messageId) {
+      return res.status(400).json({ error: "Message ID is required" });
+    }
+    // Find the message
+    const message = await Message.findById(messageId).populate('groupId');
+    if (!message || !message.groupId) {
+      return res.status(404).json({ error: "Group message not found" });
+    }
+    // Update or add the user's read receipt
+    let updated = false;
+    message.groupReadReceipts = message.groupReadReceipts.map(r => {
+      if (r.userId.toString() === userId.toString()) {
+        if (r.status !== 'seen') {
+          updated = true;
+          return { ...r.toObject(), status: 'seen', seenAt: new Date() };
+        }
+      }
+      return r;
+    });
+    // If user didn't have a receipt, add it
+    if (!message.groupReadReceipts.some(r => r.userId.toString() === userId.toString())) {
+      message.groupReadReceipts.push({ userId, status: 'seen', seenAt: new Date() });
+      updated = true;
+    }
+    if (!updated) {
+      return res.status(200).json({ message: "Already marked as seen" });
+    }
+    // If all group members have seen, update main message status
+    const groupMemberIds = message.groupId.members.map(m => m.user.toString());
+    const allSeen = groupMemberIds.every(id =>
+      message.groupReadReceipts.find(r => r.userId.toString() === id && r.status === 'seen')
+    );
+    if (allSeen) {
+      message.status = 'seen';
+      message.seenAt = new Date();
+    }
+    await message.save();
+    // Emit real-time update to all group members
+    const { io } = await import('../lib/socket.js');
+    groupMemberIds.forEach(memberId => {
+      const socketId = getReceiverSocketId(memberId);
+      if (socketId) {
+        io.to(socketId).emit("groupMessageReadReceiptUpdate", {
+          messageId: message._id,
+          groupReadReceipts: message.groupReadReceipts,
+          status: message.status,
+          seenAt: message.seenAt
+        });
+      }
+    });
+    res.status(200).json({ message: "Read receipt updated", groupReadReceipts: message.groupReadReceipts, status: message.status });
+  } catch (error) {
+    console.error("Error in updateGroupMessageReadReceipt:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
 import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
 import Group from "../models/group.model.js";

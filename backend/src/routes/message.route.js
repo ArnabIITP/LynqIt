@@ -1,5 +1,8 @@
+
 import express from "express";
+const router = express.Router();
 import { protectRoute } from "../middleware/auth.middleware.js";
+
 
 import {
   getMessages,
@@ -14,8 +17,11 @@ import {
   markMentionsAsRead,
   getFirstUnreadMention,
   forwardMessage,
-  clearChat
+  clearChat,
+  updateGroupMessageReadReceipt
 } from "../controllers/message.controller.js";
+// Group message read receipt route
+router.post("/group/read-receipt", protectRoute, updateGroupMessageReadReceipt);
 
 import {
   markChatAsRead,
@@ -23,7 +29,6 @@ import {
   syncUnreadCounts
 } from "../controllers/unreadCounter.controller.js";
 
-const router = express.Router();
 
 // Specific routes MUST come before parameterized routes
 // Unread counter routes (WhatsApp-style)
