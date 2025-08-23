@@ -7,7 +7,7 @@ This document explains the implementation of a robust retry mechanism for handli
 The AI API integration was experiencing issues with:
 1. Rate limiting from the OpenRouter API
 2. Error responses being shown to users instead of retrying
-3. The "Together" provider with "meta-llama/llama-3.2-11b-vision-instruct:free" model sometimes returning errors
+3. The model sometimes returning errors
 
 ## Solution
 
@@ -50,7 +50,7 @@ A comprehensive retry system has been implemented that:
 
 1. When a user sends a message:
    - The frontend sends the request to the backend
-   - The backend initiates the OpenRouter API call
+   - The backend initiates the API call
 
 2. If a rate limit is encountered:
    - The backend starts retrying with exponential backoff
