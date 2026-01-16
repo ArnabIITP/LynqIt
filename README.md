@@ -171,7 +171,3 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## 📄 License
 
 This project is licensed under the ISC License - see the LICENSE file for details.
-
-## 📞 Contact
-
-For any questions or support, please contact [your-email@example.com](mailto:your-email@example.com).
